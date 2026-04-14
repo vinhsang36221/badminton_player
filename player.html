@@ -44,28 +44,30 @@
           <form id="playerRegisterForm" class="row g-3">
             <div class="col-12 col-md-6">
               <label for="registerName" class="form-label">Name</label>
-              <input id="registerName" class="form-control" required>
+              <input id="registerName" class="form-control" placeholder="Nhập tên" required>
             </div>
             <div class="col-12 col-md-6">
               <label for="registerPhone" class="form-label">Phone</label>
-              <input id="registerPhone" class="form-control" inputmode="tel" required>
+              <input id="registerPhone" class="form-control" inputmode="tel" placeholder="Nhập số điện thoại" required>
             </div>
             <div class="col-12 col-md-6">
               <label for="registerSex" class="form-label">Gender</label>
-              <select id="registerSex" class="form-select">
+              <select id="registerSex" class="form-select" required>
+                <option value="" selected disabled>Chọn giới tính</option>
                 <option value="male">Nam</option>
                 <option value="female">Nữ</option>
               </select>
             </div>
             <div class="col-12 col-md-6">
               <label for="registerLevel" class="form-label">Level</label>
-              <select id="registerLevel" class="form-select">
+              <select id="registerLevel" class="form-select" required>
+                <option value="" selected disabled>Chọn level</option>
                 <option value="0">Newbie</option>
                 <option value="1">Yếu -</option>
                 <option value="2">Yếu</option>
                 <option value="3">Yếu +</option>
                 <option value="4">Trung Bình -</option>
-                <option value="5" selected>Trung Bình</option>
+                <option value="5">Trung Bình</option>
                 <option value="6">Trung Bình +</option>
                 <option value="7">Khá -</option>
                 <option value="8">Khá</option>
@@ -75,9 +77,10 @@
             </div>
             <div class="col-12 col-md-6">
               <label for="registerPrefer" class="form-label">Prefer</label>
-              <select id="registerPrefer" class="form-select">
+              <select id="registerPrefer" class="form-select" required>
+                <option value="" selected disabled>Chọn prefer</option>
                 <option value="chill">Chill</option>
-                <option value="normal" selected>Normal</option>
+                <option value="normal">Normal</option>
                 <option value="challenge">Challenge</option>
               </select>
             </div>

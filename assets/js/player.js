@@ -200,14 +200,37 @@ function updatePlayerAccessControls() {
   if (cancelButton) cancelButton.disabled = !canCancelRegisteredPlayers(playerWindowConfig) || !activeSessionPlayer;
 }
 
+function resetRegisterForm(phone = '') {
+  const registerForm = document.getElementById('playerRegisterForm');
+  if (registerForm) registerForm.reset();
+
+  const registerName = document.getElementById('registerName');
+  if (registerName) registerName.value = '';
+
+  const registerPhone = document.getElementById('registerPhone');
+  if (registerPhone) registerPhone.value = phone || '';
+
+  const registerSex = document.getElementById('registerSex');
+  if (registerSex) registerSex.value = '';
+
+  const registerLevel = document.getElementById('registerLevel');
+  if (registerLevel) registerLevel.value = '';
+
+  const registerPrefer = document.getElementById('registerPrefer');
+  if (registerPrefer) registerPrefer.value = '';
+
+  const registerReady = document.getElementById('registerReady');
+  if (registerReady) registerReady.value = 'not_ready';
+
+  updateStatusFieldVisibility();
+}
+
 function showRegisterCard(phone) {
   const card = document.getElementById('playerRegisterCard');
   const manage = document.getElementById('playerManageCard');
   if (card) card.classList.remove('d-none');
   if (manage) manage.classList.add('d-none');
-  const phoneInput = document.getElementById('registerPhone');
-  if (phoneInput) phoneInput.value = phone || '';
-  updateStatusFieldVisibility();
+  resetRegisterForm(phone);
 }
 
 function showManageCard(player) {
@@ -230,6 +253,7 @@ function resetPlayerCards() {
   const manageCard = document.getElementById('playerManageCard');
   if (registerCard) registerCard.classList.add('d-none');
   if (manageCard) manageCard.classList.add('d-none');
+  resetRegisterForm('');
 }
 
 function resetActivePlayerState() {
@@ -379,8 +403,8 @@ async function handleRegisterSubmit(event) {
     return;
   }
   const player = buildRegisteredPlayer();
-  if (!player.name || !player.phone) {
-    setFeedback('Name và phone là bắt buộc.', 'warning');
+  if (!player.name || !player.phone || !player.gender || !document.getElementById('registerLevel').value || !player.prefer) {
+    setFeedback('Hãy nhập name, phone và chọn đầy đủ giới tính, level, prefer.', 'warning');
     return;
   }
   try {
@@ -490,6 +514,7 @@ async function startPlayerPage() {
 
   appReady = true;
   document.getElementById('lookupPhone').value = '';
+  resetRegisterForm('');
 }
 
 const lookupForm = document.getElementById('playerLookupForm');
