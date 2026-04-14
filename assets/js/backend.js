@@ -1,17 +1,20 @@
 (function () {
   const globalConfig = window.BADMINTON_SUPABASE_CONFIG || {};
   const hasSupabaseLibrary = typeof window.supabase !== 'undefined' && typeof window.supabase.createClient === 'function';
-  const isConfigured = !!(globalConfig.url && globalConfig.anonKey && hasSupabaseLibrary);
+  const hasServiceRoleKey = !!globalConfig.serviceRoleKey;
+  const projectKey = globalConfig.serviceRoleKey || globalConfig.anonKey || '';
+  const isConfigured = !!(globalConfig.url && projectKey && hasSupabaseLibrary);
   const SESSION_PLAYERS_TABLE = 'players';
   const PLAYER_PROFILES_TABLE = 'player_profiles';
   const DISPLAY_PLAYERS_VIEW = 'public_players_display';
+  const PUBLIC_APP_CONFIG_VIEW = 'public_app_config';
   const PLAYER_ACCESS_FUNCTION = 'player-access';
   let client = null;
 
   function getClient() {
     if (!isConfigured) return null;
     if (!client) {
-      client = window.supabase.createClient(globalConfig.url, globalConfig.anonKey, {
+      client = window.supabase.createClient(globalConfig.url, projectKey, {
         auth: {
           persistSession: false,
           autoRefreshToken: false,
@@ -225,8 +228,9 @@
   async function fetchAppConfig() {
     const supabaseClient = getClient();
     if (!supabaseClient) return mapConfigRow(null);
+    const configSource = hasServiceRoleKey ? 'app_config' : PUBLIC_APP_CONFIG_VIEW;
     const { data, error } = await supabaseClient
-      .from('app_config')
+      .from(configSource)
       .select('*')
       .eq('id', 'global')
       .maybeSingle();
@@ -312,12 +316,13 @@
   }
 
   function subscribeToAppConfig(callback) {
+    if (!hasServiceRoleKey) return function () {};
     return subscribeToTable('app_config', callback);
   }
 
   function getMissingConfigMessage() {
     if (!hasSupabaseLibrary) return 'Missing Supabase JS library.';
-    if (!globalConfig.url || !globalConfig.anonKey) return 'Fill url and anonKey in supabase-config.js.';
+    if (!globalConfig.url || !projectKey) return 'Fill url plus anonKey or serviceRoleKey in config.';
     return '';
   }
 
