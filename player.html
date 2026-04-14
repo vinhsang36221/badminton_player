@@ -44,7 +44,9 @@
           <form id="playerRegisterForm" class="row g-3">
             <div class="col-12 col-md-6">
               <label for="registerName" class="form-label">Name</label>
-              <input id="registerName" class="form-control" placeholder="Nhập tên" required>
+              <input id="registerName" class="form-control" placeholder="Nhập tên" maxlength="13" required>
+              <div class="form-text">Ví dụ: Sang_95, Vinh Sang, Gnas_36221</div>
+              <div id="registerNameWarning" class="player-inline-warning d-none" aria-live="polite"></div>
             </div>
             <div class="col-12 col-md-6">
               <label for="registerPhone" class="form-label">Phone</label>

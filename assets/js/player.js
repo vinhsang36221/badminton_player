@@ -23,6 +23,9 @@ let activePlayerProfile = null;
 let activeSessionPlayer = null;
 let appReady = false;
 let playerSettingsSubscription = null;
+let duplicateNameCheckTimer = null;
+let duplicateNameCheckSequence = 0;
+const PLAYER_NAME_MAX_LENGTH = 13;
 
 function playerNow() {
   return new Date();
@@ -117,6 +120,104 @@ function setFeedback(message, type) {
   box.textContent = message;
 }
 
+function appendDuplicateNameNotice(message, response) {
+  const duplicateNameNotice = response && typeof response.duplicateNameNotice === 'string'
+    ? response.duplicateNameNotice.trim()
+    : '';
+  if (!duplicateNameNotice) return message;
+  return `${message}\n${duplicateNameNotice}`;
+}
+
+function formatRegisterNameValue(value) {
+  const collapsed = String(value || '').replace(/\s+/g, ' ').trim();
+  if (!collapsed) return '';
+
+  const buildFormattedName = (baseName, suffix, separator) => {
+    const maxBaseLength = Math.max(1, PLAYER_NAME_MAX_LENGTH - suffix.length - separator.length);
+    const trimmedBaseName = String(baseName || '').trimEnd().slice(0, maxBaseLength).trimEnd();
+    return `${trimmedBaseName}${separator}${suffix}`;
+  };
+
+  const mixedNameMatch = collapsed.match(/^(.*?)(\d+)$/);
+  if (mixedNameMatch && mixedNameMatch[1] && /\D/.test(mixedNameMatch[1]) && !/[_]$/.test(mixedNameMatch[1])) {
+    return buildFormattedName(mixedNameMatch[1], mixedNameMatch[2], '_');
+  }
+
+  return collapsed.slice(0, PLAYER_NAME_MAX_LENGTH).trim();
+}
+
+function getRegisterNameInput() {
+  return document.getElementById('registerName');
+}
+
+function getRegisterNameWarning() {
+  return document.getElementById('registerNameWarning');
+}
+
+function clearDuplicateNameWarning() {
+  const input = getRegisterNameInput();
+  const warning = getRegisterNameWarning();
+  if (input) input.classList.remove('player-name-duplicate');
+  if (warning) {
+    warning.classList.add('d-none');
+    warning.textContent = '';
+  }
+}
+
+function showDuplicateNameWarning(message) {
+  const input = getRegisterNameInput();
+  const warning = getRegisterNameWarning();
+  if (input) input.classList.add('player-name-duplicate');
+  if (warning) {
+    warning.classList.remove('d-none');
+    warning.textContent = message;
+  }
+}
+
+async function checkDuplicateRegisterNameNow() {
+  const input = getRegisterNameInput();
+  if (!input) return;
+  const formattedName = formatRegisterNameValue(input.value);
+  if (input.value !== formattedName) input.value = formattedName;
+  const name = formattedName;
+  const requestId = ++duplicateNameCheckSequence;
+
+  if (!name || !window.BadmintonBackend || !window.BadmintonBackend.isConfigured) {
+    clearDuplicateNameWarning();
+    return;
+  }
+
+  try {
+    const response = await window.BadmintonBackend.checkDuplicatePlayerName(name);
+    if (requestId !== duplicateNameCheckSequence) return;
+    const duplicateNameNotice = response && typeof response.duplicateNameNotice === 'string'
+      ? response.duplicateNameNotice.trim()
+      : '';
+    if (duplicateNameNotice) showDuplicateNameWarning(duplicateNameNotice);
+    else clearDuplicateNameWarning();
+  } catch (error) {
+    if (requestId !== duplicateNameCheckSequence) return;
+    clearDuplicateNameWarning();
+  }
+}
+
+function scheduleDuplicateRegisterNameCheck(immediate = false) {
+  if (duplicateNameCheckTimer) {
+    window.clearTimeout(duplicateNameCheckTimer);
+    duplicateNameCheckTimer = null;
+  }
+
+  if (immediate) {
+    void checkDuplicateRegisterNameNow();
+    return;
+  }
+
+  duplicateNameCheckTimer = window.setTimeout(() => {
+    duplicateNameCheckTimer = null;
+    void checkDuplicateRegisterNameNow();
+  }, 350);
+}
+
 function renderWindowBanner() {
   const banner = document.getElementById('playerWindowBanner');
   if (!banner) return;
@@ -206,6 +307,8 @@ function resetRegisterForm(phone = '') {
 
   const registerName = document.getElementById('registerName');
   if (registerName) registerName.value = '';
+  duplicateNameCheckSequence += 1;
+  clearDuplicateNameWarning();
 
   const registerPhone = document.getElementById('registerPhone');
   if (registerPhone) registerPhone.value = phone || '';
@@ -413,7 +516,10 @@ async function handleRegisterSubmit(event) {
     const savedSession = response && response.sessionPlayer ? response.sessionPlayer : null;
     setActivePlayerRecords(savedProfile, savedSession);
     showManageCard(activePlayer);
-    setFeedback('Đăng ký thành công ! Hãy nhớ check status Ready khi đến sân nhé.\nHẹn gặp lại bạn.', 'success');
+    setFeedback(
+      appendDuplicateNameNotice('Đăng ký thành công ! Hãy nhớ check status Ready khi đến sân nhé.\nHẹn gặp lại bạn.', response),
+      'success'
+    );
   } catch (error) {
     setFeedback(error.message || 'Không thể đăng ký player.', 'danger');
   }
@@ -449,9 +555,12 @@ async function handleManageSubmit(event) {
     setActivePlayerRecords(savedProfile, savedSession);
     showManageCard(activePlayer);
     setFeedback(
-      wasRegisteredInCurrentSession
-        ? (hasPlayStarted(playerWindowConfig) ? 'Đã cập nhật prefer và status.' : 'Đã cập nhật prefer.')
-        : 'Đăng ký thành công vào danh sách player hiện tại.',
+      appendDuplicateNameNotice(
+        wasRegisteredInCurrentSession
+          ? (hasPlayStarted(playerWindowConfig) ? 'Đã cập nhật prefer và status.' : 'Đã cập nhật prefer.')
+          : 'Đăng ký thành công vào danh sách player hiện tại.',
+        response
+      ),
       'success'
     );
   } catch (error) {
@@ -521,6 +630,35 @@ const lookupForm = document.getElementById('playerLookupForm');
 if (lookupForm) lookupForm.addEventListener('submit', handleLookupSubmit);
 const registerForm = document.getElementById('playerRegisterForm');
 if (registerForm) registerForm.addEventListener('submit', handleRegisterSubmit);
+const registerNameInput = document.getElementById('registerName');
+if (registerNameInput) {
+  registerNameInput.addEventListener('input', () => {
+    const formattedName = formatRegisterNameValue(registerNameInput.value);
+    if (registerNameInput.value !== formattedName) {
+      registerNameInput.value = formattedName;
+    }
+    const currentValue = formattedName.trim();
+    if (!currentValue) {
+      duplicateNameCheckSequence += 1;
+      clearDuplicateNameWarning();
+      return;
+    }
+    scheduleDuplicateRegisterNameCheck(false);
+  });
+  registerNameInput.addEventListener('blur', () => {
+    const formattedName = formatRegisterNameValue(registerNameInput.value);
+    if (registerNameInput.value !== formattedName) {
+      registerNameInput.value = formattedName;
+    }
+    const currentValue = formattedName.trim();
+    if (!currentValue) {
+      duplicateNameCheckSequence += 1;
+      clearDuplicateNameWarning();
+      return;
+    }
+    scheduleDuplicateRegisterNameCheck(true);
+  });
+}
 const manageForm = document.getElementById('playerManageForm');
 if (manageForm) manageForm.addEventListener('submit', handleManageSubmit);
 const cancelRegistrationButton = document.getElementById('playerCancelRegistration');

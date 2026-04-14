@@ -287,6 +287,10 @@
     return invokePlayerAccess('lookup', { phone });
   }
 
+  async function checkDuplicatePlayerName(name) {
+    return invokePlayerAccess('check-name', { name });
+  }
+
   async function registerPlayerAccess(player) {
     return invokePlayerAccess('register', { player });
   }
@@ -347,6 +351,7 @@
     subscribeToPlayers: subscribeToPlayers,
     subscribeToAppConfig: subscribeToAppConfig,
     lookupPlayerAccess: lookupPlayerAccess,
+    checkDuplicatePlayerName: checkDuplicatePlayerName,
     registerPlayerAccess: registerPlayerAccess,
     savePlayerAccess: savePlayerAccess,
     cancelPlayerAccess: cancelPlayerAccess,

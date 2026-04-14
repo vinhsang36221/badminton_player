@@ -452,6 +452,19 @@ body { font-size: 14px; }
 	color: #fff;
 }
 
+.player-inline-warning {
+	margin-top: 0.35rem;
+	font-size: 0.82rem;
+	font-weight: 700;
+	color: #b42318;
+	line-height: 1.35;
+}
+
+.player-name-duplicate {
+	border-color: #dc3545 !important;
+	box-shadow: 0 0 0 0.2rem rgba(220, 53, 69, 0.16) !important;
+}
+
 .player-page-bg {
 	min-height: 100vh;
 	background: linear-gradient(180deg, #f6f1e7 0%, #eaf1f3 100%);
