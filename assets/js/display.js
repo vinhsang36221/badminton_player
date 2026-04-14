@@ -125,7 +125,7 @@ function displayRender() {
 }
 
 async function displayLoadAll() {
-  displayPlayers = await window.BadmintonBackend.fetchPlayers();
+  displayPlayers = await window.BadmintonBackend.fetchDisplayPlayers();
   displayConfig = await window.BadmintonBackend.fetchAppConfig();
   displayRender();
 }
@@ -157,12 +157,6 @@ async function displayStart() {
   }
 
   await displayLoadAll();
-
-  if (displayPlayersUnsubscribe) displayPlayersUnsubscribe();
-  displayPlayersUnsubscribe = window.BadmintonBackend.subscribeToPlayers(async () => {
-    displayPlayers = await window.BadmintonBackend.fetchPlayers();
-    displayRender();
-  });
 
   if (displayConfigUnsubscribe) displayConfigUnsubscribe();
   displayConfigUnsubscribe = window.BadmintonBackend.subscribeToAppConfig(async () => {

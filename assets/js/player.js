@@ -291,10 +291,9 @@ async function loadWindowConfig() {
 
 async function lookupPlayerByPhone(phone) {
   if (!window.BadmintonBackend || !window.BadmintonBackend.isConfigured) return;
-  const [profile, sessionPlayer] = await Promise.all([
-    window.BadmintonBackend.findPlayerProfileByPhone(phone),
-    window.BadmintonBackend.findSessionPlayerByPhone(phone)
-  ]);
+  const response = await window.BadmintonBackend.lookupPlayerAccess(phone);
+  const profile = response && response.profile ? response.profile : null;
+  const sessionPlayer = response && response.sessionPlayer ? response.sessionPlayer : null;
 
   if (sessionPlayer) {
     setActivePlayerRecords(profile || sessionPlayer, sessionPlayer);
@@ -385,11 +384,9 @@ async function handleRegisterSubmit(event) {
     return;
   }
   try {
-    const savedProfile = await window.BadmintonBackend.upsertPlayerProfile(player);
-    const savedSession = await window.BadmintonBackend.upsertPlayer({
-      ...savedProfile,
-      updatedAt: new Date().toISOString()
-    });
+    const response = await window.BadmintonBackend.registerPlayerAccess(player);
+    const savedProfile = response && response.profile ? response.profile : null;
+    const savedSession = response && response.sessionPlayer ? response.sessionPlayer : null;
     setActivePlayerRecords(savedProfile, savedSession);
     showManageCard(activePlayer);
     setFeedback('Đăng ký thành công ! Hãy nhớ check status Ready khi đến sân nhé.\nHẹn gặp lại bạn.', 'success');
@@ -422,11 +419,9 @@ async function handleManageSubmit(event) {
     updatedAt: new Date().toISOString()
   };
   try {
-    const savedProfile = await window.BadmintonBackend.upsertPlayerProfile(nextPlayer);
-    const savedSession = await window.BadmintonBackend.upsertPlayer({
-      ...savedProfile,
-      updatedAt: new Date().toISOString()
-    });
+    const response = await window.BadmintonBackend.savePlayerAccess(nextPlayer);
+    const savedProfile = response && response.profile ? response.profile : null;
+    const savedSession = response && response.sessionPlayer ? response.sessionPlayer : null;
     setActivePlayerRecords(savedProfile, savedSession);
     showManageCard(activePlayer);
     setFeedback(
@@ -452,7 +447,10 @@ async function handleCancelRegistration() {
 
   const phone = activePlayer && activePlayer.phone ? activePlayer.phone : '';
   try {
-    await window.BadmintonBackend.deletePlayer(activeSessionPlayer.id);
+    await window.BadmintonBackend.cancelPlayerAccess({
+      phone,
+      sessionPlayerId: activeSessionPlayer.id
+    });
     if (phone) {
       await lookupPlayerByPhone(phone);
     } else {

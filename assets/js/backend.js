@@ -4,6 +4,8 @@
   const isConfigured = !!(globalConfig.url && globalConfig.anonKey && hasSupabaseLibrary);
   const SESSION_PLAYERS_TABLE = 'players';
   const PLAYER_PROFILES_TABLE = 'player_profiles';
+  const DISPLAY_PLAYERS_VIEW = 'public_players_display';
+  const PLAYER_ACCESS_FUNCTION = 'player-access';
   let client = null;
 
   function getClient() {
@@ -159,6 +161,18 @@
     return fetchTablePlayers(SESSION_PLAYERS_TABLE);
   }
 
+  async function fetchDisplayPlayers() {
+    const supabaseClient = getClient();
+    if (!supabaseClient) return [];
+    const { data, error } = await supabaseClient
+      .from(DISPLAY_PLAYERS_VIEW)
+      .select('*')
+      .order('created_at', { ascending: true })
+      .order('name', { ascending: true });
+    if (error) throw error;
+    return (data || []).map(mapRemotePlayer).filter(Boolean);
+  }
+
   async function findPlayerByPhone(phone) {
     return findTablePlayerByPhone(SESSION_PLAYERS_TABLE, phone);
   }
@@ -242,6 +256,45 @@
     return mapConfigRow(data);
   }
 
+  function toErrorMessage(error, fallbackMessage) {
+    if (!error) return fallbackMessage || 'Unknown error';
+    if (typeof error === 'string') return error;
+    if (typeof error.message === 'string' && error.message) return error.message;
+    if (typeof error.error === 'string' && error.error) return error.error;
+    if (typeof error.details === 'string' && error.details) return error.details;
+    return fallbackMessage || 'Unknown error';
+  }
+
+  async function invokePlayerAccess(action, payload) {
+    const supabaseClient = getClient();
+    if (!supabaseClient) throw new Error('Supabase client is not configured.');
+    const { data, error } = await supabaseClient.functions.invoke(PLAYER_ACCESS_FUNCTION, {
+      body: {
+        action,
+        ...(payload || {})
+      }
+    });
+    if (error) throw new Error(toErrorMessage(error, 'Cannot reach secure player endpoint.'));
+    if (data && data.error) throw new Error(toErrorMessage(data, 'Secure player endpoint failed.'));
+    return data || {};
+  }
+
+  async function lookupPlayerAccess(phone) {
+    return invokePlayerAccess('lookup', { phone });
+  }
+
+  async function registerPlayerAccess(player) {
+    return invokePlayerAccess('register', { player });
+  }
+
+  async function savePlayerAccess(player) {
+    return invokePlayerAccess('save', { player });
+  }
+
+  async function cancelPlayerAccess(payload) {
+    return invokePlayerAccess('cancel', payload);
+  }
+
   function subscribeToTable(tableName, callback) {
     const supabaseClient = getClient();
     if (!supabaseClient) return function () {};
@@ -273,6 +326,7 @@
     getClient: getClient,
     getMissingConfigMessage: getMissingConfigMessage,
     fetchPlayers: fetchPlayers,
+    fetchDisplayPlayers: fetchDisplayPlayers,
     findPlayerByPhone: findPlayerByPhone,
     fetchPlayerProfiles: fetchPlayerProfiles,
     findPlayerProfileByPhone: findPlayerProfileByPhone,
@@ -287,6 +341,10 @@
     saveAppConfig: saveAppConfig,
     subscribeToPlayers: subscribeToPlayers,
     subscribeToAppConfig: subscribeToAppConfig,
+    lookupPlayerAccess: lookupPlayerAccess,
+    registerPlayerAccess: registerPlayerAccess,
+    savePlayerAccess: savePlayerAccess,
+    cancelPlayerAccess: cancelPlayerAccess,
     mapRemotePlayer: mapRemotePlayer,
     mapConfigRow: mapConfigRow
   };
