@@ -311,7 +311,7 @@ async function lookupPlayerByPhone(phone) {
     }
     setActivePlayerRecords(profile, null);
     showManageCard(activePlayer);
-    setFeedback('Đã đồng bộ dữ liệu từ player profile. Bấm "Đăng ký" để vào danh sách player của đợt hiện tại.', 'info');
+    setFeedback('Chúng tôi đã có thông tin đăng ký của bạn trước đây. Bấm "Đăng ký" để vào danh sách player của đợt hiện tại.', 'info');
     return;
   }
 
