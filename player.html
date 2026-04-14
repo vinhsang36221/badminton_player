@@ -1,0 +1,154 @@
+<!doctype html>
+<html lang="vi">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width,initial-scale=1">
+    <title>Badminton Player Check-in</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@700;800&display=swap&subset=vietnamese" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="assets/css/styles.css">
+  </head>
+  <body class="player-page-bg">
+    <div class="container py-4 py-md-5">
+      <div class="route-switch mb-3">
+        <a class="btn btn-sm uniform-btn player-action-btn" href="display.html">Match Display</a>
+      </div>
+
+      <div class="player-shell mx-auto">
+        <div class="player-header-card mb-3">
+          <p class="player-eyebrow mb-2">Player Self Check-in</p>
+          <h1 class="player-title mb-2">Đăng ký và xác nhận đến sân</h1>
+        </div>
+
+        <div id="playerConfigWarning" class="alert alert-warning d-none"></div>
+        <div id="playerWindowBanner" class="alert alert-secondary"></div>
+        <div id="playerFeedback" class="alert d-none"></div>
+
+        <div class="player-card mb-3">
+          <h2 class="player-card-title">Đăng nhập bằng số điện thoại</h2>
+          <form id="playerLookupForm" class="row g-3 align-items-end">
+            <div class="col-12 col-md-8">
+              <label for="lookupPhone" class="form-label">Phone</label>
+              <input id="lookupPhone" class="form-control" inputmode="tel" autocomplete="tel" placeholder="Nhập số điện thoại" required>
+            </div>
+            <div class="col-12 col-md-4 d-grid">
+              <button id="lookupButton" class="btn uniform-btn player-action-btn" type="submit">Tiếp tục</button>
+            </div>
+          </form>
+        </div>
+
+        <div id="playerRegisterCard" class="player-card d-none mb-3">
+          <h2 class="player-card-title">Đăng ký player mới</h2>
+          <form id="playerRegisterForm" class="row g-3">
+            <div class="col-12 col-md-6">
+              <label for="registerName" class="form-label">Name</label>
+              <input id="registerName" class="form-control" required>
+            </div>
+            <div class="col-12 col-md-6">
+              <label for="registerPhone" class="form-label">Phone</label>
+              <input id="registerPhone" class="form-control" inputmode="tel" required>
+            </div>
+            <div class="col-12 col-md-6">
+              <label for="registerSex" class="form-label">Gender</label>
+              <select id="registerSex" class="form-select">
+                <option value="male">Nam</option>
+                <option value="female">Nữ</option>
+              </select>
+            </div>
+            <div class="col-12 col-md-6">
+              <label for="registerLevel" class="form-label">Level</label>
+              <select id="registerLevel" class="form-select">
+                <option value="0">Newbie</option>
+                <option value="1">Yếu -</option>
+                <option value="2">Yếu</option>
+                <option value="3">Yếu +</option>
+                <option value="4">Trung Bình -</option>
+                <option value="5" selected>Trung Bình</option>
+                <option value="6">Trung Bình +</option>
+                <option value="7">Khá -</option>
+                <option value="8">Khá</option>
+                <option value="9">Khá +</option>
+                <option value="10">Giỏi</option>
+              </select>
+            </div>
+            <div class="col-12 col-md-6">
+              <label for="registerPrefer" class="form-label">Prefer</label>
+              <select id="registerPrefer" class="form-select">
+                <option value="chill">Chill</option>
+                <option value="normal" selected>Normal</option>
+                <option value="challenge">Challenge</option>
+              </select>
+            </div>
+            <div id="registerStatusField" class="col-12 col-md-6">
+              <label for="registerReady" class="form-label">Status</label>
+              <select id="registerReady" class="form-select">
+                <option value="ready">Ready</option>
+                <option value="not_ready" selected>Not Ready</option>
+              </select>
+            </div>
+            <div class="col-12 d-grid">
+              <button class="btn uniform-btn player-action-btn" type="submit">Đăng ký mới và check-in</button>
+            </div>
+          </form>
+        </div>
+
+        <div id="playerManageCard" class="player-card d-none">
+          <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-3">
+            <div>
+              <h2 class="player-card-title mb-1">Thông tin player</h2>
+              <p class="text-muted mb-0">Bạn có thể dùng thông tin này để đăng ký vào đợt hiện tại.</p>
+            </div>
+            <button id="playerLogout" class="btn btn-sm uniform-btn player-action-btn" type="button">Đổi số điện thoại</button>
+          </div>
+
+          <form id="playerManageForm" class="row g-3">
+            <div class="col-12 col-md-6">
+              <label for="manageName" class="form-label">Name</label>
+              <input id="manageName" class="form-control" readonly>
+            </div>
+            <div class="col-12 col-md-6">
+              <label for="managePhone" class="form-label">Phone</label>
+              <input id="managePhone" class="form-control" readonly>
+            </div>
+            <div class="col-12 col-md-6">
+              <label for="manageSex" class="form-label">Gender</label>
+              <input id="manageSex" class="form-control" readonly>
+            </div>
+            <div class="col-12 col-md-6">
+              <label for="manageLevel" class="form-label">Level</label>
+              <input id="manageLevel" class="form-control" readonly>
+            </div>
+            <div class="col-12 col-md-6">
+              <label for="managePrefer" class="form-label">Prefer</label>
+              <select id="managePrefer" class="form-select">
+                <option value="chill">Chill</option>
+                <option value="normal">Normal</option>
+                <option value="challenge">Challenge</option>
+              </select>
+            </div>
+            <div id="manageStatusField" class="col-12 col-md-6">
+              <label for="manageReady" class="form-label">Status</label>
+              <select id="manageReady" class="form-select">
+                <option value="ready">Ready</option>
+                <option value="not_ready" selected>Not Ready</option>
+              </select>
+            </div>
+            <div class="col-12">
+              <div class="player-manage-actions">
+                <button id="playerManageSubmit" class="btn uniform-btn player-action-btn" type="submit">Đăng ký</button>
+                <button id="playerCancelRegistration" class="btn player-cancel-btn" type="button">Hủy đăng ký</button>
+              </div>
+            </div>
+          </form>
+        </div>
+      </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="config/supabase-config.js"></script>
+    <script src="assets/js/backend.js"></script>
+    <script src="assets/js/player.js"></script>
+  </body>
+</html>
