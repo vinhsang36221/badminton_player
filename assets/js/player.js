@@ -238,7 +238,7 @@ function renderWindowBanner() {
 
   if (phase === 'before-open') {
     banner.className = 'alert alert-warning';
-    banner.textContent = 'Chỉ được đăng nhập trong khung giờ ' + formatWindowDate(playerWindowConfig.checkinOpenAt) + ' - ' + formatWindowDate(playerWindowConfig.checkinCloseAt);
+    banner.textContent = 'Hiện tại chưa đến giờ đăng ký. Vui lòng quay lại trong khung giờ ' + formatWindowDate(playerWindowConfig.checkinOpenAt) + ' - ' + formatWindowDate(playerWindowConfig.checkinCloseAt);
     return;
   }
 
