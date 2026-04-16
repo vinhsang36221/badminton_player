@@ -43,8 +43,26 @@
     return Array.isArray(value) ? JSON.parse(JSON.stringify(value)) : [];
   }
 
+  function isEmptyRemotePlayerRow(row) {
+    if (!row || typeof row !== 'object') return true;
+    return !row.id
+      && !row.name
+      && !row.phone
+      && row.gender == null
+      && row.level == null
+      && row.prefer == null
+      && row.ready == null
+      && row.rating == null
+      && row.couple == null
+      && row.unpair == null
+      && row.unpair_main == null
+      && row.partner_slot == null
+      && row.created_at == null
+      && row.updated_at == null;
+  }
+
   function mapRemotePlayer(row) {
-    if (!row) return null;
+    if (!row || isEmptyRemotePlayerRow(row)) return null;
     return {
       id: row.id,
       name: row.name || '',
