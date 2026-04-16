@@ -146,14 +146,8 @@ function formatRegisterNameValue(value) {
   return collapsed.slice(0, PLAYER_NAME_MAX_LENGTH).trim();
 }
 
-function formatRegisterNameInputValue(value) {
-  const rawValue = String(value || '');
-  const normalizedValue = rawValue.replace(/\s+/g, ' ');
-  const hasTrailingSpace = / $/.test(normalizedValue);
-  const formattedValue = formatRegisterNameValue(normalizedValue);
-  if (!hasTrailingSpace || !formattedValue) return formattedValue;
-  if (formattedValue.length >= PLAYER_NAME_MAX_LENGTH) return formattedValue;
-  return `${formattedValue} `;
+function formatRegisterNameDraftValue(value) {
+  return String(value || '').slice(0, PLAYER_NAME_MAX_LENGTH);
 }
 
 function getRegisterNameInput() {
@@ -188,7 +182,6 @@ async function checkDuplicateRegisterNameNow() {
   const input = getRegisterNameInput();
   if (!input) return;
   const formattedName = formatRegisterNameValue(input.value);
-  if (input.value !== formattedName) input.value = formattedName;
   const name = formattedName;
   const requestId = ++duplicateNameCheckSequence;
 
@@ -657,7 +650,7 @@ if (registerForm) registerForm.addEventListener('submit', handleRegisterSubmit);
 const registerNameInput = document.getElementById('registerName');
 if (registerNameInput) {
   registerNameInput.addEventListener('input', () => {
-    const formattedName = formatRegisterNameInputValue(registerNameInput.value);
+    const formattedName = formatRegisterNameDraftValue(registerNameInput.value);
     if (registerNameInput.value !== formattedName) {
       registerNameInput.value = formattedName;
     }
