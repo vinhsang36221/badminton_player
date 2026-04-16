@@ -146,6 +146,16 @@ function formatRegisterNameValue(value) {
   return collapsed.slice(0, PLAYER_NAME_MAX_LENGTH).trim();
 }
 
+function formatRegisterNameInputValue(value) {
+  const rawValue = String(value || '');
+  const normalizedValue = rawValue.replace(/\s+/g, ' ');
+  const hasTrailingSpace = / $/.test(normalizedValue);
+  const formattedValue = formatRegisterNameValue(normalizedValue);
+  if (!hasTrailingSpace || !formattedValue) return formattedValue;
+  if (formattedValue.length >= PLAYER_NAME_MAX_LENGTH) return formattedValue;
+  return `${formattedValue} `;
+}
+
 function getRegisterNameInput() {
   return document.getElementById('registerName');
 }
@@ -647,7 +657,7 @@ if (registerForm) registerForm.addEventListener('submit', handleRegisterSubmit);
 const registerNameInput = document.getElementById('registerName');
 if (registerNameInput) {
   registerNameInput.addEventListener('input', () => {
-    const formattedName = formatRegisterNameValue(registerNameInput.value);
+    const formattedName = formatRegisterNameInputValue(registerNameInput.value);
     if (registerNameInput.value !== formattedName) {
       registerNameInput.value = formattedName;
     }
