@@ -479,6 +479,16 @@ function buildRegisteredPlayer() {
   };
 }
 
+function setLookupLoading(isLoading) {
+  const phoneInput = document.getElementById('lookupPhone');
+  const lookupButton = document.getElementById('lookupButton');
+  if (phoneInput) phoneInput.disabled = !!isLoading || !canLookupPlayers(playerWindowConfig);
+  if (lookupButton) {
+    lookupButton.disabled = !!isLoading || !canLookupPlayers(playerWindowConfig);
+    lookupButton.textContent = isLoading ? 'Đang tải...' : 'Tiếp tục';
+  }
+}
+
 async function handleLookupSubmit(event) {
   event.preventDefault();
   setFeedback('', 'secondary');
@@ -493,9 +503,12 @@ async function handleLookupSubmit(event) {
     return;
   }
   try {
+    setLookupLoading(true);
     await lookupPlayerByPhone(phone);
   } catch (error) {
     setFeedback(error.message || 'Không thể tải dữ liệu player.', 'danger');
+  } finally {
+    setLookupLoading(false);
   }
 }
 
@@ -624,6 +637,7 @@ async function startPlayerPage() {
   appReady = true;
   document.getElementById('lookupPhone').value = '';
   resetRegisterForm('');
+  setLookupLoading(false);
 }
 
 const lookupForm = document.getElementById('playerLookupForm');

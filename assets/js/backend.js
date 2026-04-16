@@ -63,6 +63,16 @@
     };
   }
 
+  function normalizeLookupAccessResponse(data) {
+    const source = data || {};
+    return {
+      phase: source.phase || null,
+      playStarted: source.playStarted === true || source.play_started === true,
+      profile: mapRemotePlayer(source.profile || null),
+      sessionPlayer: mapRemotePlayer(source.sessionPlayer || source.session_player || null)
+    };
+  }
+
   function toPlayerPayload(player, index) {
     const level = Number.isFinite(Number(player.level)) ? Number(player.level) : 4;
     const rating = Number.isFinite(Number(player.rating)) ? Number(player.rating) : level * 100;
@@ -284,7 +294,21 @@
   }
 
   async function lookupPlayerAccess(phone) {
-    return invokePlayerAccess('lookup', { phone });
+    const supabaseClient = getClient();
+    const normalizedPhone = normalizePhone(phone);
+    if (!supabaseClient || !normalizedPhone) {
+      return invokePlayerAccess('lookup', { phone });
+    }
+
+    try {
+      const { data, error } = await supabaseClient.rpc('lookup_player_public', {
+        p_phone: normalizedPhone
+      });
+      if (error) throw error;
+      return normalizeLookupAccessResponse(data);
+    } catch (error) {
+      return invokePlayerAccess('lookup', { phone: normalizedPhone });
+    }
   }
 
   async function checkDuplicatePlayerName(name) {
