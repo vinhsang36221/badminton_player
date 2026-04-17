@@ -78,7 +78,22 @@
               </select>
             </div>
             <div class="col-12 col-md-6">
-              <label for="registerPrefer" class="form-label">Prefer</label>
+              <label for="registerPrefer" class="form-label player-label-with-help">
+                <span>Prefer</span>
+                <span class="player-field-tooltip">
+                  <button
+                    class="player-field-tooltip__trigger"
+                    type="button"
+                    aria-label="Giải thích Prefer"
+                  >i</button>
+                  <span class="player-field-tooltip__content" role="tooltip">
+                    Prefer là loại trận đấu mà bạn mong muốn<br>
+                    Chill = các trận nhẹ nhàng<br>
+                    Normal = Bình thường<br>
+                    Challenge = các trận đấu căng thẳng
+                  </span>
+                </span>
+              </label>
               <select id="registerPrefer" class="form-select" required>
                 <option value="" selected hidden>Chọn prefer</option>
                 <option value="chill">Chill</option>
@@ -126,7 +141,22 @@
               <input id="manageLevel" class="form-control" readonly>
             </div>
             <div class="col-12 col-md-6">
-              <label for="managePrefer" class="form-label">Prefer</label>
+              <label for="managePrefer" class="form-label player-label-with-help">
+                <span>Prefer</span>
+                <span class="player-field-tooltip">
+                  <button
+                    class="player-field-tooltip__trigger"
+                    type="button"
+                    aria-label="Giải thích Prefer"
+                  >i</button>
+                  <span class="player-field-tooltip__content" role="tooltip">
+                    Prefer là loại trận đấu mà bạn mong muốn<br>
+                    Chill = các trận nhẹ nhàng<br>
+                    Normal = Bình thường<br>
+                    Challenge = các trận đấu căng thẳng
+                  </span>
+                </span>
+              </label>
               <select id="managePrefer" class="form-select">
                 <option value="chill">Chill</option>
                 <option value="normal">Normal</option>
