@@ -253,16 +253,6 @@ body { font-size: 14px; }
 
 .btn-uncouple{ background-color: #dc3545 !important; color: #fff !important; border: none !important; }
 
-/* Wish button equal width */
-.wish-btn{ display:inline-flex; justify-content:center; align-items:center; min-width:70px; transition: transform 120ms ease, box-shadow 120ms ease, opacity 120ms ease; }
-/* less prominent when not selected */
-.wish-btn.btn-outline-secondary{ opacity: 0.75; }
-/* Selected styles per preference */
-.wish-btn.wish-selected-chill{ background-color: #28a745 !important; color: #fff !important; box-shadow: 0 8px 22px rgba(40,167,69,0.12), 0 0 0 3px rgba(40,167,69,0.08); transform: translateY(-2px); border: 1px solid rgba(40,167,69,0.9) !important; }
-.wish-btn.wish-selected-normal{ background-color: #fdcc3a !important; color: #000 !important; box-shadow: 0 8px 22px rgba(253,204,58,0.12), 0 0 0 3px rgba(253,204,58,0.08); transform: translateY(-2px); border: 1px solid rgba(253,204,58,0.9) !important; }
-.wish-btn.wish-selected-challenge{ background-color: #ff6b6b !important; color: #fff !important; box-shadow: 0 8px 22px rgba(255,107,107,0.12), 0 0 0 3px rgba(255,107,107,0.08); transform: translateY(-2px); border: 1px solid rgba(255,107,107,0.9) !important; }
-.wish-btn:focus{ outline: none; }
-
 /* Prefer toggle in admin list: keep fixed width to avoid shifting */
 .prefer-btn{ display:inline-flex; justify-content:center; align-items:center; width:96px !important; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
 

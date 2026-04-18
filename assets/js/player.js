@@ -123,6 +123,7 @@ function setFeedback(message, type) {
 function getSuccessPopupElements() {
   return {
     popup: document.getElementById('playerSuccessPopup'),
+    title: document.getElementById('playerSuccessPopupTitle'),
     message: document.getElementById('playerSuccessPopupMessage'),
     okButton: document.getElementById('playerSuccessPopupOk')
   };
@@ -137,8 +138,19 @@ function closeSuccessPopup() {
 }
 
 function showSuccessPopup(message) {
-  const { popup, message: messageNode, okButton } = getSuccessPopupElements();
+  const { popup, title, message: messageNode, okButton } = getSuccessPopupElements();
   if (!popup || !messageNode) return;
+  if (title) title.textContent = 'Đăng ký thành công';
+  messageNode.textContent = message || '';
+  popup.classList.remove('d-none');
+  document.body.classList.add('player-popup-open');
+  if (okButton) okButton.focus();
+}
+
+function showSuccessPopupWithTitle(titleText, message) {
+  const { popup, title, message: messageNode, okButton } = getSuccessPopupElements();
+  if (!popup || !messageNode) return;
+  if (title) title.textContent = titleText || 'Thông báo';
   messageNode.textContent = message || '';
   popup.classList.remove('d-none');
   document.body.classList.add('player-popup-open');
@@ -599,14 +611,16 @@ async function handleManageSubmit(event) {
     const savedSession = response && response.sessionPlayer ? response.sessionPlayer : null;
     setActivePlayerRecords(savedProfile, savedSession);
     showManageCard(activePlayer);
-    setFeedback(
-      appendDuplicateNameNotice(
-        wasRegisteredInCurrentSession
-          ? (hasPlayStarted(playerWindowConfig) ? 'Đã cập nhật prefer và status.' : 'Đã cập nhật prefer.')
-          : 'Đăng ký thành công vào danh sách player hiện tại.',
-        response
-      ),
-      'success'
+    const successMessage = appendDuplicateNameNotice(
+      wasRegisteredInCurrentSession
+        ? (hasPlayStarted(playerWindowConfig) ? 'Đã cập nhật prefer và status thành công.' : 'Đã cập nhật prefer thành công.')
+        : 'Đăng ký lại thành công vào danh sách player hiện tại.',
+      response
+    );
+    setFeedback(successMessage, 'success');
+    showSuccessPopupWithTitle(
+      wasRegisteredInCurrentSession ? 'Cập nhật thành công' : 'Đăng ký lại thành công',
+      successMessage
     );
   } catch (error) {
     setFeedback(error.message || 'Không thể lưu thay đổi.', 'danger');
@@ -635,7 +649,9 @@ async function handleCancelRegistration() {
       resetActivePlayerState();
       resetPlayerCards();
     }
-    setFeedback('Đã hủy đăng ký khỏi player session hiện tại.', 'success');
+    const successMessage = 'Đã hủy đăng ký khỏi player session hiện tại.';
+    setFeedback(successMessage, 'success');
+    showSuccessPopupWithTitle('Hủy đăng ký thành công', successMessage);
   } catch (error) {
     setFeedback(error.message || 'Không thể hủy đăng ký.', 'danger');
   }
