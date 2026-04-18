@@ -120,6 +120,31 @@ function setFeedback(message, type) {
   box.textContent = message;
 }
 
+function getSuccessPopupElements() {
+  return {
+    popup: document.getElementById('playerSuccessPopup'),
+    message: document.getElementById('playerSuccessPopupMessage'),
+    okButton: document.getElementById('playerSuccessPopupOk')
+  };
+}
+
+function closeSuccessPopup() {
+  const { popup, okButton } = getSuccessPopupElements();
+  if (!popup) return;
+  popup.classList.add('d-none');
+  document.body.classList.remove('player-popup-open');
+  if (okButton) okButton.blur();
+}
+
+function showSuccessPopup(message) {
+  const { popup, message: messageNode, okButton } = getSuccessPopupElements();
+  if (!popup || !messageNode) return;
+  messageNode.textContent = message || '';
+  popup.classList.remove('d-none');
+  document.body.classList.add('player-popup-open');
+  if (okButton) okButton.focus();
+}
+
 function appendDuplicateNameNotice(message, response) {
   const duplicateNameNotice = response && typeof response.duplicateNameNotice === 'string'
     ? response.duplicateNameNotice.trim()
@@ -233,7 +258,7 @@ function renderWindowBanner() {
   }
   const playStarted = hasPlayStarted(playerWindowConfig);
   const playAtHint = (!playStarted && playerWindowConfig.playAt)
-    ? '. Status sẽ mở sau ' + formatWindowDate(playerWindowConfig.playAt)
+    ? '\nStatus sẽ mở sau ' + formatWindowDate(playerWindowConfig.playAt)
     : '';
 
   if (phase === 'before-open') {
@@ -245,7 +270,7 @@ function renderWindowBanner() {
   if (phase === 'checkin-open') {
     banner.className = 'alert alert-success';
     banner.style.whiteSpace = 'pre-line';
-    banner.textContent = 'Cổng check-in đang mở đến ' + formatWindowDate(playerWindowConfig.checkinCloseAt) + '.\nTrong thời gian này bạn có thể đăng ký mới, đăng ký lại bằng phone hoặc hủy đăng ký hiện tại.';
+    banner.textContent = 'Cổng check-in đang mở đến ' + formatWindowDate(playerWindowConfig.checkinCloseAt) + '.\nTrong thời gian này bạn có thể đăng ký mới, đăng ký lại bằng phone hoặc hủy đăng ký hiện tại.' + playAtHint;
     return;
   }
 
@@ -254,17 +279,19 @@ function renderWindowBanner() {
 }
 
 function updateStatusFieldVisibility(player = activePlayer) {
-  const showStatus = hasPlayStarted(playerWindowConfig);
+  const phase = getPlayerAccessPhase(playerWindowConfig);
+  const showStatus = phase === 'checkin-open' || phase === 'after-close';
+  const canEditStatus = showStatus && hasPlayStarted(playerWindowConfig);
   const registerField = document.getElementById('registerStatusField');
   const manageField = document.getElementById('manageStatusField');
   if (registerField) registerField.classList.toggle('d-none', !showStatus);
   if (manageField) manageField.classList.toggle('d-none', !showStatus);
 
   const registerReady = document.getElementById('registerReady');
-  if (registerReady && !showStatus) registerReady.value = 'not_ready';
+  if (registerReady && !canEditStatus) registerReady.value = 'not_ready';
 
   const manageReady = document.getElementById('manageReady');
-  if (manageReady) manageReady.value = showStatus && player && player.ready === true ? 'ready' : 'not_ready';
+  if (manageReady) manageReady.value = canEditStatus && player && player.ready === true ? 'ready' : 'not_ready';
 }
 
 function updatePlayerAccessControls() {
@@ -530,12 +557,14 @@ async function handleRegisterSubmit(event) {
     const response = await window.BadmintonBackend.registerPlayerAccess(player);
     const savedProfile = response && response.profile ? response.profile : null;
     const savedSession = response && response.sessionPlayer ? response.sessionPlayer : null;
+    const successMessage = appendDuplicateNameNotice(
+      'Hãy chuyển status => Ready khi đến sân nhé.\nHẹn gặp lại bạn.',
+      response
+    );
     setActivePlayerRecords(savedProfile, savedSession);
     showManageCard(activePlayer);
-    setFeedback(
-      appendDuplicateNameNotice('Đăng ký thành công ! Hãy nhớ check status Ready khi đến sân nhé.\nHẹn gặp lại bạn.', response),
-      'success'
-    );
+    setFeedback(successMessage, 'success');
+    showSuccessPopup(successMessage);
   } catch (error) {
     setFeedback(error.message || 'Không thể đăng ký player.', 'danger');
   }
@@ -682,5 +711,21 @@ const cancelRegistrationButton = document.getElementById('playerCancelRegistrati
 if (cancelRegistrationButton) cancelRegistrationButton.addEventListener('click', handleCancelRegistration);
 const logoutButton = document.getElementById('playerLogout');
 if (logoutButton) logoutButton.onclick = handleLogout;
+const successPopup = document.getElementById('playerSuccessPopup');
+if (successPopup) {
+  successPopup.addEventListener('click', event => {
+    if (event.target instanceof HTMLElement && event.target.dataset.popupClose === 'true') {
+      closeSuccessPopup();
+    }
+  });
+}
+const successPopupOkButton = document.getElementById('playerSuccessPopupOk');
+if (successPopupOkButton) successPopupOkButton.addEventListener('click', closeSuccessPopup);
+document.addEventListener('keydown', event => {
+  if (event.key === 'Escape') {
+    const { popup } = getSuccessPopupElements();
+    if (popup && !popup.classList.contains('d-none')) closeSuccessPopup();
+  }
+});
 
 startPlayerPage();

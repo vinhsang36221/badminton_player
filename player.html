@@ -178,6 +178,16 @@
             </div>
           </form>
         </div>
+
+        <div id="playerSuccessPopup" class="player-popup d-none" role="dialog" aria-modal="true" aria-labelledby="playerSuccessPopupTitle" aria-describedby="playerSuccessPopupMessage">
+          <div class="player-popup__backdrop" data-popup-close="true"></div>
+          <div class="player-popup__panel" role="document">
+            <p class="player-popup__eyebrow mb-2">Thông báo</p>
+            <h2 id="playerSuccessPopupTitle" class="player-popup__title">Đăng ký thành công</h2>
+            <p id="playerSuccessPopupMessage" class="player-popup__message"></p>
+            <button id="playerSuccessPopupOk" class="btn uniform-btn player-action-btn player-popup__button" type="button">OK</button>
+          </div>
+        </div>
       </div>
     </div>
 
