@@ -4,10 +4,13 @@
   const hasServiceRoleKey = !!globalConfig.serviceRoleKey;
   const projectKey = globalConfig.serviceRoleKey || globalConfig.anonKey || '';
   const isConfigured = !!(globalConfig.url && projectKey && hasSupabaseLibrary);
+  const PLAYER_SESSIONS_TABLE = 'player_sessions';
   const SESSION_PLAYERS_TABLE = 'players';
   const PLAYER_PROFILES_TABLE = 'player_profiles';
+  const APP_CONFIG_TABLE = 'app_config';
   const DISPLAY_PLAYERS_VIEW = 'public_players_display';
   const PUBLIC_APP_CONFIG_VIEW = 'public_app_config';
+  const PUBLIC_PLAYER_SESSIONS_VIEW = 'public_player_sessions';
   const PLAYER_ACCESS_FUNCTION = 'player-access';
   let client = null;
 
@@ -46,6 +49,7 @@
   function isEmptyRemotePlayerRow(row) {
     if (!row || typeof row !== 'object') return true;
     return !row.id
+      && !row.session_id
       && !row.name
       && !row.phone
       && row.gender == null
@@ -65,6 +69,7 @@
     if (!row || isEmptyRemotePlayerRow(row)) return null;
     return {
       id: row.id,
+      sessionId: row.session_id || null,
       name: row.name || '',
       phone: row.phone || '',
       gender: row.gender || 'male',
@@ -81,6 +86,23 @@
     };
   }
 
+  function mapPlayerSessionRow(row) {
+    const source = row || {};
+    return {
+      id: 'global',
+      sessionId: source.id || source.session_id || null,
+      activeSessionId: source.active_session_id || source.id || source.session_id || null,
+      checkinEnabled: !!source.checkin_enabled,
+      checkinOpenAt: source.checkin_open_at || null,
+      checkinCloseAt: source.checkin_close_at || null,
+      playAt: source.play_at || null,
+      courtEnabledStates: cloneArray(source.court_enabled_states),
+      layoutState: source.layout_state || null,
+      createdAt: source.created_at || null,
+      updatedAt: source.updated_at || null
+    };
+  }
+
   function normalizeLookupAccessResponse(data) {
     const source = data || {};
     return {
@@ -91,11 +113,12 @@
     };
   }
 
-  function toPlayerPayload(player, index) {
+  function toPlayerPayload(player, sessionId) {
     const level = Number.isFinite(Number(player.level)) ? Number(player.level) : 4;
     const rating = Number.isFinite(Number(player.rating)) ? Number(player.rating) : level * 100;
     return {
       id: player.id,
+      session_id: sessionId || player.sessionId || null,
       name: player.name || '',
       phone: normalizePhone(player.phone),
       gender: player.gender || 'male',
@@ -108,19 +131,22 @@
       unpair_main: !!player.unpairMain,
       partner_slot: player.partnerSlot || null,
       created_at: player.createdAt || isoNow(),
-      updated_at: isoNow()
+      updated_at: player.updatedAt || isoNow()
     };
   }
 
   function defaultConfigRow() {
     return {
       id: 'global',
+      session_id: null,
+      active_session_id: null,
       checkin_enabled: false,
       checkin_open_at: null,
       checkin_close_at: null,
       play_at: null,
       court_enabled_states: null,
       layout_state: null,
+      created_at: null,
       updated_at: null
     };
   }
@@ -129,56 +155,62 @@
     const source = row || defaultConfigRow();
     return {
       id: source.id || 'global',
+      sessionId: source.session_id || null,
+      activeSessionId: source.active_session_id || source.session_id || null,
       checkinEnabled: !!source.checkin_enabled,
       checkinOpenAt: source.checkin_open_at || null,
       checkinCloseAt: source.checkin_close_at || null,
       playAt: source.play_at || null,
       courtEnabledStates: cloneArray(source.court_enabled_states),
       layoutState: source.layout_state || null,
+      createdAt: source.created_at || null,
       updatedAt: source.updated_at || null
     };
   }
 
-  async function fetchTablePlayers(tableName) {
+  async function fetchTablePlayers(tableName, options = {}) {
     const supabaseClient = getClient();
     if (!supabaseClient) return [];
-    const { data, error } = await supabaseClient
+    let query = supabaseClient
       .from(tableName)
-      .select('*')
+      .select('*');
+    if (options.sessionId) query = query.eq('session_id', options.sessionId);
+    const { data, error } = await query
       .order('created_at', { ascending: true })
       .order('name', { ascending: true });
     if (error) throw error;
     return (data || []).map(mapRemotePlayer).filter(Boolean);
   }
 
-  async function findTablePlayerByPhone(tableName, phone) {
+  async function findTablePlayerByPhone(tableName, phone, options = {}) {
     const supabaseClient = getClient();
     if (!supabaseClient) return null;
     const normalizedPhone = normalizePhone(phone);
     if (!normalizedPhone) return null;
-    const { data, error } = await supabaseClient
+    let query = supabaseClient
       .from(tableName)
       .select('*')
-      .eq('phone', normalizedPhone)
-      .maybeSingle();
+      .eq('phone', normalizedPhone);
+    if (options.sessionId) query = query.eq('session_id', options.sessionId);
+    const { data, error } = await query.maybeSingle();
     if (error) throw error;
     return mapRemotePlayer(data);
   }
 
-  async function upsertTablePlayers(tableName, players) {
+  async function upsertTablePlayers(tableName, players, options = {}) {
     const supabaseClient = getClient();
     if (!supabaseClient) return [];
-    const payload = (players || []).map((player, index) => toPlayerPayload(player, index));
+    const payload = (players || []).map(player => toPlayerPayload(player, options.sessionId));
     if (!payload.length) return [];
     const { error } = await supabaseClient.from(tableName).upsert(payload, { onConflict: 'id' });
     if (error) throw error;
     return payload;
   }
 
-  async function upsertTablePlayer(tableName, player) {
+  async function upsertTablePlayer(tableName, player, options = {}) {
     const supabaseClient = getClient();
     if (!supabaseClient) return null;
-    const payload = toPlayerPayload(player);
+    const payload = toPlayerPayload(player, options.sessionId);
     const { data, error } = await supabaseClient
       .from(tableName)
       .upsert(payload, { onConflict: 'id' })
@@ -188,8 +220,46 @@
     return mapRemotePlayer(data);
   }
 
-  async function fetchPlayers() {
-    return fetchTablePlayers(SESSION_PLAYERS_TABLE);
+  async function fetchPlayerSession(sessionId) {
+    const supabaseClient = getClient();
+    if (!supabaseClient || !sessionId) return mapConfigRow(null);
+    const { data, error } = await supabaseClient
+      .from(PLAYER_SESSIONS_TABLE)
+      .select('*')
+      .eq('id', sessionId)
+      .maybeSingle();
+    if (error) throw error;
+    return mapPlayerSessionRow(data);
+  }
+
+  async function fetchPlayerSessions() {
+    const supabaseClient = getClient();
+    if (!supabaseClient) return [];
+    const { data, error } = await supabaseClient
+      .from(PLAYER_SESSIONS_TABLE)
+      .select('*')
+      .order('checkin_open_at', { ascending: false, nullsFirst: false })
+      .order('created_at', { ascending: false });
+    if (error) throw error;
+    return (data || []).map(mapPlayerSessionRow).filter(session => !!session.sessionId);
+  }
+
+  async function fetchSelectablePlayerSessions() {
+    const supabaseClient = getClient();
+    if (!supabaseClient) return [];
+    const source = hasServiceRoleKey ? PLAYER_SESSIONS_TABLE : PUBLIC_PLAYER_SESSIONS_VIEW;
+    const { data, error } = await supabaseClient
+      .from(source)
+      .select('*')
+      .order('checkin_open_at', { ascending: true, nullsFirst: false })
+      .order('created_at', { ascending: false });
+    if (error) throw error;
+    return (data || []).map(mapPlayerSessionRow).filter(session => !!session.sessionId && session.checkinEnabled);
+  }
+
+  async function fetchPlayers(sessionId) {
+    if (!sessionId) return [];
+    return fetchTablePlayers(SESSION_PLAYERS_TABLE, { sessionId });
   }
 
   async function fetchDisplayPlayers() {
@@ -204,16 +274,16 @@
     return (data || []).map(mapRemotePlayer).filter(Boolean);
   }
 
-  async function findPlayerByPhone(phone) {
-    return findTablePlayerByPhone(SESSION_PLAYERS_TABLE, phone);
+  async function findPlayerByPhone(phone, sessionId) {
+    return findTablePlayerByPhone(SESSION_PLAYERS_TABLE, phone, { sessionId });
   }
 
-  async function upsertPlayers(players) {
-    return upsertTablePlayers(SESSION_PLAYERS_TABLE, players);
+  async function upsertPlayers(players, sessionId) {
+    return upsertTablePlayers(SESSION_PLAYERS_TABLE, players, { sessionId });
   }
 
-  async function upsertPlayer(player) {
-    return upsertTablePlayer(SESSION_PLAYERS_TABLE, player);
+  async function upsertPlayer(player, sessionId) {
+    return upsertTablePlayer(SESSION_PLAYERS_TABLE, player, { sessionId });
   }
 
   async function fetchPlayerProfiles() {
@@ -224,8 +294,8 @@
     return findTablePlayerByPhone(PLAYER_PROFILES_TABLE, phone);
   }
 
-  async function findSessionPlayerByPhone(phone) {
-    return findTablePlayerByPhone(SESSION_PLAYERS_TABLE, phone);
+  async function findSessionPlayerByPhone(phone, sessionId) {
+    return findTablePlayerByPhone(SESSION_PLAYERS_TABLE, phone, { sessionId });
   }
 
   async function upsertPlayerProfiles(players) {
@@ -236,13 +306,13 @@
     return upsertTablePlayer(PLAYER_PROFILES_TABLE, player);
   }
 
-  async function clearPlayers() {
+  async function clearPlayers(sessionId) {
     const supabaseClient = getClient();
-    if (!supabaseClient) return;
+    if (!supabaseClient || !sessionId) return;
     const { error } = await supabaseClient
       .from(SESSION_PLAYERS_TABLE)
       .delete()
-      .not('id', 'is', null);
+      .eq('session_id', sessionId);
     if (error) throw error;
   }
 
@@ -253,12 +323,21 @@
     if (error) throw error;
   }
 
-  async function fetchAppConfig() {
+  async function fetchAppConfig(sessionId) {
     const supabaseClient = getClient();
     if (!supabaseClient) return mapConfigRow(null);
-    const configSource = hasServiceRoleKey ? 'app_config' : PUBLIC_APP_CONFIG_VIEW;
+    if (sessionId) {
+      if (hasServiceRoleKey) return fetchPlayerSession(sessionId);
+      const { data, error } = await supabaseClient
+        .from(PUBLIC_PLAYER_SESSIONS_VIEW)
+        .select('*')
+        .eq('session_id', sessionId)
+        .maybeSingle();
+      if (error) throw error;
+      return mapConfigRow(data ? { ...data, id: 'global' } : null);
+    }
     const { data, error } = await supabaseClient
-      .from(configSource)
+      .from(PUBLIC_APP_CONFIG_VIEW)
       .select('*')
       .eq('id', 'global')
       .maybeSingle();
@@ -266,21 +345,76 @@
     return mapConfigRow(data);
   }
 
-  async function saveAppConfig(config) {
-    const supabaseClient = getClient();
-    if (!supabaseClient) return mapConfigRow(config);
-    const payload = {
-      id: 'global',
+  function toPlayerSessionPayload(config, sessionId) {
+    return {
+      id: sessionId || config.sessionId,
       checkin_enabled: !!config.checkinEnabled,
       checkin_open_at: config.checkinOpenAt || null,
       checkin_close_at: config.checkinCloseAt || null,
       play_at: config.playAt || null,
       court_enabled_states: cloneArray(config.courtEnabledStates),
       layout_state: config.layoutState || null,
+      created_at: config.createdAt || isoNow(),
       updated_at: config.updatedAt || isoNow()
     };
+  }
+
+  async function createPlayerSession(config) {
+    const supabaseClient = getClient();
+    if (!supabaseClient) return mapPlayerSessionRow({
+      id: config.sessionId,
+      checkin_enabled: !!config.checkinEnabled,
+      checkin_open_at: config.checkinOpenAt || null,
+      checkin_close_at: config.checkinCloseAt || null,
+      play_at: config.playAt || null,
+      court_enabled_states: cloneArray(config.courtEnabledStates),
+      layout_state: config.layoutState || null,
+      created_at: config.createdAt || isoNow(),
+      updated_at: config.updatedAt || isoNow()
+    });
+    const payload = toPlayerSessionPayload(config, config.sessionId);
     const { data, error } = await supabaseClient
-      .from('app_config')
+      .from(PLAYER_SESSIONS_TABLE)
+      .insert(payload)
+      .select('*')
+      .single();
+    if (error) throw error;
+    return mapPlayerSessionRow(data);
+  }
+
+  async function updatePlayerSession(config) {
+    const supabaseClient = getClient();
+    if (!supabaseClient) return mapPlayerSessionRow({
+      id: config.sessionId,
+      checkin_enabled: !!config.checkinEnabled,
+      checkin_open_at: config.checkinOpenAt || null,
+      checkin_close_at: config.checkinCloseAt || null,
+      play_at: config.playAt || null,
+      court_enabled_states: cloneArray(config.courtEnabledStates),
+      layout_state: config.layoutState || null,
+      created_at: config.createdAt || isoNow(),
+      updated_at: config.updatedAt || isoNow()
+    });
+    const payload = toPlayerSessionPayload(config, config.sessionId);
+    const { data, error } = await supabaseClient
+      .from(PLAYER_SESSIONS_TABLE)
+      .upsert(payload, { onConflict: 'id' })
+      .select('*')
+      .single();
+    if (error) throw error;
+    return mapPlayerSessionRow(data);
+  }
+
+  async function setActivePlayerSession(sessionId) {
+    const supabaseClient = getClient();
+    if (!supabaseClient) return mapConfigRow({ id: 'global', session_id: sessionId, active_session_id: sessionId, updated_at: isoNow() });
+    const payload = {
+      id: 'global',
+      active_session_id: sessionId || null,
+      updated_at: isoNow()
+    };
+    const { data, error } = await supabaseClient
+      .from(APP_CONFIG_TABLE)
       .upsert(payload, { onConflict: 'id' })
       .select('*')
       .single();
@@ -311,21 +445,23 @@
     return data || {};
   }
 
-  async function lookupPlayerAccess(phone) {
+  async function lookupPlayerAccess(phone, sessionId) {
     const supabaseClient = getClient();
     const normalizedPhone = normalizePhone(phone);
     if (!supabaseClient || !normalizedPhone) {
-      return invokePlayerAccess('lookup', { phone });
+      return invokePlayerAccess('lookup', { phone, sessionId });
     }
 
     try {
-      const { data, error } = await supabaseClient.rpc('lookup_player_public', {
-        p_phone: normalizedPhone
-      });
+      const rpcName = sessionId ? 'lookup_player_public_by_session' : 'lookup_player_public';
+      const rpcPayload = sessionId
+        ? { p_phone: normalizedPhone, p_session_id: sessionId }
+        : { p_phone: normalizedPhone };
+      const { data, error } = await supabaseClient.rpc(rpcName, rpcPayload);
       if (error) throw error;
       return normalizeLookupAccessResponse(data);
     } catch (error) {
-      return invokePlayerAccess('lookup', { phone: normalizedPhone });
+      return invokePlayerAccess('lookup', { phone: normalizedPhone, sessionId });
     }
   }
 
@@ -333,37 +469,45 @@
     return invokePlayerAccess('check-name', { name });
   }
 
-  async function registerPlayerAccess(player) {
-    return invokePlayerAccess('register', { player });
+  async function registerPlayerAccess(player, sessionId) {
+    return invokePlayerAccess('register', { player, sessionId });
   }
 
-  async function savePlayerAccess(player) {
-    return invokePlayerAccess('save', { player });
+  async function savePlayerAccess(player, sessionId) {
+    return invokePlayerAccess('save', { player, sessionId });
   }
 
   async function cancelPlayerAccess(payload) {
     return invokePlayerAccess('cancel', payload);
   }
 
-  function subscribeToTable(tableName, callback) {
+  function subscribeToTable(tableName, callback, options = {}) {
     const supabaseClient = getClient();
     if (!supabaseClient) return function () {};
+    const subscriptionConfig = { event: '*', schema: 'public', table: tableName };
+    if (options.filter) subscriptionConfig.filter = options.filter;
     const channel = supabaseClient
       .channel('badminton-' + tableName + '-' + Math.random().toString(36).slice(2, 8))
-      .on('postgres_changes', { event: '*', schema: 'public', table: tableName }, callback)
+      .on('postgres_changes', subscriptionConfig, callback)
       .subscribe();
     return function () {
       supabaseClient.removeChannel(channel);
     };
   }
 
-  function subscribeToPlayers(callback) {
-    return subscribeToTable('players', callback);
+  function subscribeToPlayers(callback, sessionId) {
+    if (!sessionId) return function () {};
+    return subscribeToTable(SESSION_PLAYERS_TABLE, callback, { filter: `session_id=eq.${sessionId}` });
   }
 
   function subscribeToAppConfig(callback) {
     if (!hasServiceRoleKey) return function () {};
-    return subscribeToTable('app_config', callback);
+    const unsubscribeAppConfig = subscribeToTable(APP_CONFIG_TABLE, callback);
+    const unsubscribeSessions = subscribeToTable(PLAYER_SESSIONS_TABLE, callback);
+    return function () {
+      unsubscribeAppConfig();
+      unsubscribeSessions();
+    };
   }
 
   function getMissingConfigMessage() {
@@ -376,6 +520,12 @@
     isConfigured: isConfigured,
     getClient: getClient,
     getMissingConfigMessage: getMissingConfigMessage,
+    fetchPlayerSession: fetchPlayerSession,
+    fetchPlayerSessions: fetchPlayerSessions,
+    fetchSelectablePlayerSessions: fetchSelectablePlayerSessions,
+    createPlayerSession: createPlayerSession,
+    updatePlayerSession: updatePlayerSession,
+    setActivePlayerSession: setActivePlayerSession,
     fetchPlayers: fetchPlayers,
     fetchDisplayPlayers: fetchDisplayPlayers,
     findPlayerByPhone: findPlayerByPhone,
@@ -389,7 +539,6 @@
     clearPlayers: clearPlayers,
     deletePlayer: deletePlayer,
     fetchAppConfig: fetchAppConfig,
-    saveAppConfig: saveAppConfig,
     subscribeToPlayers: subscribeToPlayers,
     subscribeToAppConfig: subscribeToAppConfig,
     lookupPlayerAccess: lookupPlayerAccess,
@@ -398,6 +547,7 @@
     savePlayerAccess: savePlayerAccess,
     cancelPlayerAccess: cancelPlayerAccess,
     mapRemotePlayer: mapRemotePlayer,
-    mapConfigRow: mapConfigRow
+    mapConfigRow: mapConfigRow,
+    mapPlayerSessionRow: mapPlayerSessionRow
   };
 })();

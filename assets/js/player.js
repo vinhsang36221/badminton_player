@@ -12,12 +12,21 @@ const PLAYER_LEVEL_LABELS = {
   10: 'Giỏi'
 };
 
-let playerWindowConfig = {
-  checkinEnabled: false,
-  checkinOpenAt: null,
-  checkinCloseAt: null,
-  playAt: null
-};
+function createEmptyPlayerWindowConfig(overrides = {}) {
+  return {
+    sessionId: null,
+    activeSessionId: null,
+    checkinEnabled: false,
+    checkinOpenAt: null,
+    checkinCloseAt: null,
+    playAt: null,
+    sessionSelectionRequired: false,
+    ...overrides
+  };
+}
+
+let playerWindowConfig = createEmptyPlayerWindowConfig();
+let availablePlayerSessions = [];
 let activePlayer = null;
 let activePlayerProfile = null;
 let activeSessionPlayer = null;
@@ -31,8 +40,20 @@ function playerNow() {
   return new Date();
 }
 
+function getSelectedPlayerSessionId(config = playerWindowConfig) {
+  return config && config.sessionId ? config.sessionId : null;
+}
+
+function hasSelectedPlayerSession(config = playerWindowConfig) {
+  return !!getSelectedPlayerSessionId(config);
+}
+
+function requiresSessionSelection(config = playerWindowConfig) {
+  return !!(config && config.sessionSelectionRequired);
+}
+
 function isWindowOpen(config) {
-  if (!config || !config.checkinEnabled || !config.checkinOpenAt || !config.checkinCloseAt) return false;
+  if (!hasSelectedPlayerSession(config) || !config.checkinEnabled || !config.checkinOpenAt || !config.checkinCloseAt) return false;
   const now = playerNow().getTime();
   const opensAt = new Date(config.checkinOpenAt).getTime();
   const closesAt = new Date(config.checkinCloseAt).getTime();
@@ -41,6 +62,7 @@ function isWindowOpen(config) {
 }
 
 function getPlayerAccessPhase(config = playerWindowConfig) {
+  if (!hasSelectedPlayerSession(config)) return requiresSessionSelection(config) ? 'select-session' : 'locked';
   if (!config || !config.checkinEnabled || !config.checkinOpenAt || !config.checkinCloseAt) return 'locked';
   const now = playerNow().getTime();
   const opensAt = new Date(config.checkinOpenAt).getTime();
@@ -52,25 +74,29 @@ function getPlayerAccessPhase(config = playerWindowConfig) {
 }
 
 function canLookupPlayers(config = playerWindowConfig) {
+  if (!hasSelectedPlayerSession(config)) return false;
   const phase = getPlayerAccessPhase(config);
   return phase === 'checkin-open' || phase === 'after-close';
 }
 
 function canRegisterNewPlayers(config = playerWindowConfig) {
+  if (!hasSelectedPlayerSession(config)) return false;
   return getPlayerAccessPhase(config) === 'checkin-open';
 }
 
 function canManageRegisteredPlayers(config = playerWindowConfig) {
+  if (!hasSelectedPlayerSession(config)) return false;
   const phase = getPlayerAccessPhase(config);
   return phase === 'checkin-open' || phase === 'after-close';
 }
 
 function canCancelRegisteredPlayers(config = playerWindowConfig) {
+  if (!hasSelectedPlayerSession(config)) return false;
   return getPlayerAccessPhase(config) === 'checkin-open';
 }
 
 function hasPlayStarted(config = playerWindowConfig) {
-  if (!config || !config.playAt) return false;
+  if (!hasSelectedPlayerSession(config) || !config.playAt) return false;
   const playAt = new Date(config.playAt).getTime();
   if (!Number.isFinite(playAt)) return false;
   return playerNow().getTime() >= playAt;
@@ -88,6 +114,11 @@ function formatWindowDate(value) {
     minute: '2-digit',
     hour12: false
   });
+}
+
+function formatPlayerSessionOptionLabel(session) {
+  const playAt = formatWindowDate(session && session.playAt);
+  return `Play Time ${playAt}`;
 }
 
 function levelLabel(level) {
@@ -263,9 +294,21 @@ function renderWindowBanner() {
   if (!banner) return;
   banner.style.whiteSpace = '';
   const phase = getPlayerAccessPhase(playerWindowConfig);
+  if (phase === 'select-session') {
+    banner.className = 'alert alert-warning';
+    banner.textContent = 'Hiện có nhiều khung thời gian đang mở. Hãy chọn đúng khung thời gian đăng ký trước khi tiếp tục.';
+    return;
+  }
+  if (!availablePlayerSessions.length) {
+    banner.className = 'alert alert-secondary';
+    banner.textContent = 'Hiện chưa có khung thời gian check-in nào đang ON.';
+    return;
+  }
   if (phase === 'locked') {
     banner.className = 'alert alert-secondary';
-    banner.textContent = 'Admin chưa mở cổng check-in.';
+    banner.textContent = hasSelectedPlayerSession(playerWindowConfig)
+      ? 'Khung thời gian này hiện không mở check-in.'
+      : 'Admin chưa mở cổng check-in.';
     return;
   }
   const playStarted = hasPlayStarted(playerWindowConfig);
@@ -282,12 +325,57 @@ function renderWindowBanner() {
   if (phase === 'checkin-open') {
     banner.className = 'alert alert-success';
     banner.style.whiteSpace = 'pre-line';
-    banner.textContent = 'Cổng check-in đang mở đến ' + formatWindowDate(playerWindowConfig.checkinCloseAt) + '.\nTrong thời gian này bạn có thể đăng ký mới, đăng ký lại bằng phone hoặc hủy đăng ký hiện tại.' + playAtHint;
+    banner.textContent = 'Cổng check-in đang mở đến ' + formatWindowDate(playerWindowConfig.checkinCloseAt) + '.\nTrong thời gian này bạn có thể đăng ký mới, đăng ký lại bằng phone hoặc hủy đăng ký của khung thời gian đang chọn.' + playAtHint;
     return;
   }
 
   banner.className = 'alert alert-info';
   banner.textContent = 'Khung giờ đăng ký mới đã đóng. Bạn chỉ có thể nhập phone để truy suất player đã đăng ký và cập nhật prefer/status.';
+}
+
+function renderPlayerSessionSelector() {
+  const card = document.getElementById('playerSessionCard');
+  const select = document.getElementById('playerSessionSelect');
+  const hint = document.getElementById('playerSessionHint');
+  if (!card || !select || !hint) return;
+
+  const selectedSessionId = getSelectedPlayerSessionId();
+  const hasSessions = availablePlayerSessions.length > 0;
+  card.classList.toggle('d-none', !hasSessions);
+
+  if (!hasSessions) {
+    select.innerHTML = '<option value="">Hiện chưa có khung thời gian mở</option>';
+    select.disabled = true;
+    hint.textContent = 'Admin cần bật ít nhất một khung thời gian để player đăng ký.';
+    return;
+  }
+
+  const hasMultipleSessions = availablePlayerSessions.length > 1;
+  const options = [];
+  if (hasMultipleSessions) {
+    options.push('<option value="">Chọn khung thời gian đăng ký</option>');
+  }
+  for (const session of availablePlayerSessions) {
+    const isSelected = selectedSessionId && session.sessionId === selectedSessionId;
+    options.push(`<option value="${session.sessionId}"${isSelected ? ' selected' : ''}>${formatPlayerSessionOptionLabel(session)}</option>`);
+  }
+  select.innerHTML = options.join('');
+  if (!selectedSessionId && !hasMultipleSessions && availablePlayerSessions[0]) {
+    select.value = availablePlayerSessions[0].sessionId;
+  }
+  select.disabled = availablePlayerSessions.length === 1;
+
+  if (availablePlayerSessions.length === 1) {
+    hint.textContent = 'Hiện tại chỉ có một khung thời gian đang mở.';
+    return;
+  }
+
+  if (selectedSessionId) {
+    hint.textContent = 'Thông tin tra cứu, đăng ký và cập nhật sẽ áp dụng cho khung thời gian đang chọn.';
+    return;
+  }
+
+  hint.textContent = 'Vui lòng chọn đúng khung thời gian bạn muốn đăng ký.';
 }
 
 function updateStatusFieldVisibility(player = activePlayer) {
@@ -445,29 +533,108 @@ function updateManageSubmitButton() {
   if (cancelButton) {
     cancelButton.disabled = !canCancelRegisteredPlayers(playerWindowConfig) || !activeSessionPlayer;
     cancelButton.title = activeSessionPlayer
-      ? (canCancelRegisteredPlayers(playerWindowConfig) ? 'Xóa player khỏi danh sách của đợt hiện tại.' : 'Chỉ có thể hủy đăng ký trong thời gian mở check-in.')
-      : 'Player này chưa có trong danh sách của đợt hiện tại.';
+      ? (canCancelRegisteredPlayers(playerWindowConfig) ? 'Xóa player khỏi danh sách của khung thời gian đang chọn.' : 'Chỉ có thể hủy đăng ký trong thời gian mở check-in.')
+      : 'Player này chưa có trong danh sách của khung thời gian đang chọn.';
   }
 }
 
-async function loadWindowConfig() {
+async function loadWindowConfig(sessionId) {
   if (!window.BadmintonBackend || !window.BadmintonBackend.isConfigured) return;
-  playerWindowConfig = await window.BadmintonBackend.fetchAppConfig();
+  if (!sessionId) {
+    playerWindowConfig = createEmptyPlayerWindowConfig({
+      sessionSelectionRequired: availablePlayerSessions.length > 1
+    });
+    renderWindowBanner();
+    updatePlayerAccessControls();
+    updateStatusFieldVisibility();
+    return;
+  }
+
+  const remoteConfig = await window.BadmintonBackend.fetchAppConfig(sessionId);
+  playerWindowConfig = createEmptyPlayerWindowConfig({
+    ...(remoteConfig || {}),
+    sessionId: (remoteConfig && remoteConfig.sessionId) || sessionId,
+    sessionSelectionRequired: false
+  });
   renderWindowBanner();
   updatePlayerAccessControls();
   updateStatusFieldVisibility();
 }
 
+function resetPlayerStateForSessionChange() {
+  resetActivePlayerState();
+  resetPlayerCards();
+  updatePlayerAccessControls();
+}
+
+async function applySelectedPlayerSession(sessionId, options = {}) {
+  const nextSessionId = sessionId || null;
+  const previousSessionId = getSelectedPlayerSessionId();
+  const sessionChanged = previousSessionId !== nextSessionId;
+
+  await loadWindowConfig(nextSessionId);
+  renderPlayerSessionSelector();
+
+  if (sessionChanged) {
+    resetPlayerStateForSessionChange();
+  }
+
+  if (options.showSelectionFeedback) {
+    if (nextSessionId) {
+      setFeedback('Đã chọn khung thời gian đăng ký. Bạn có thể tiếp tục tra cứu hoặc đăng ký player.', 'info');
+    } else if (availablePlayerSessions.length > 1) {
+      setFeedback('Có nhiều khung thời gian đang mở. Hãy chọn đúng khung thời gian trước khi tiếp tục.', 'info');
+    } else if (!availablePlayerSessions.length) {
+      setFeedback('Hiện chưa có khung thời gian check-in nào đang ON.', 'warning');
+    } else {
+      setFeedback('', 'secondary');
+    }
+  }
+}
+
+async function refreshAvailablePlayerSessions(options = {}) {
+  if (!window.BadmintonBackend || !window.BadmintonBackend.isConfigured) return;
+  const preserveCurrentSelection = options.preserveCurrentSelection !== false;
+  const currentSessionId = preserveCurrentSelection ? getSelectedPlayerSessionId() : null;
+  availablePlayerSessions = await window.BadmintonBackend.fetchSelectablePlayerSessions();
+
+  const currentStillAvailable = currentSessionId
+    ? availablePlayerSessions.some(session => session.sessionId === currentSessionId)
+    : false;
+
+  if (availablePlayerSessions.length === 1) {
+    await applySelectedPlayerSession(availablePlayerSessions[0].sessionId, {
+      showSelectionFeedback: false
+    });
+    renderPlayerSessionSelector();
+    return;
+  }
+
+  if (currentStillAvailable) {
+    await applySelectedPlayerSession(currentSessionId, {
+      showSelectionFeedback: false
+    });
+    renderPlayerSessionSelector();
+    return;
+  }
+
+  await applySelectedPlayerSession(null, {
+    showSelectionFeedback: options.showEmptyFeedback === true
+  });
+  renderPlayerSessionSelector();
+}
+
 async function lookupPlayerByPhone(phone) {
   if (!window.BadmintonBackend || !window.BadmintonBackend.isConfigured) return;
-  const response = await window.BadmintonBackend.lookupPlayerAccess(phone);
+  const selectedSessionId = getSelectedPlayerSessionId();
+  const response = await window.BadmintonBackend.lookupPlayerAccess(phone, selectedSessionId);
   const profile = response && response.profile ? response.profile : null;
   const sessionPlayer = response && response.sessionPlayer ? response.sessionPlayer : null;
 
   if (sessionPlayer) {
     setActivePlayerRecords(profile || sessionPlayer, sessionPlayer);
     showManageCard(activePlayer);
-    setFeedback('Đã tải thông tin player trong đợt đăng ký hiện tại. Bạn có thể cập nhật thông tin hoặc hủy đăng ký.', 'success');
+    setFeedback('Đã tải thông tin player trong khung thời gian đang chọn. Bạn có thể cập nhật thông tin hoặc hủy đăng ký.', 'success');
     return;
   }
 
@@ -475,12 +642,12 @@ async function lookupPlayerByPhone(phone) {
     if (!canRegisterNewPlayers(playerWindowConfig)) {
       resetPlayerCards();
       resetActivePlayerState();
-      setFeedback('Khung giờ đăng ký mới đã đóng. Chỉ player đã đăng ký trong đợt hiện tại mới có thể cập nhật thông tin.', 'warning');
+      setFeedback('Khung giờ đăng ký mới đã đóng. Chỉ player đã đăng ký trong khung thời gian đang chọn mới có thể cập nhật thông tin.', 'warning');
       return;
     }
     setActivePlayerRecords(profile, null);
     showManageCard(activePlayer);
-    setFeedback('Chúng tôi đã có thông tin đăng ký của bạn trước đây. Bấm "Đăng ký" để vào danh sách player của đợt hiện tại.', 'info');
+    setFeedback('Chúng tôi đã có thông tin đăng ký của bạn trước đây. Bấm "Đăng ký" để vào danh sách player của khung thời gian đang chọn.', 'info');
     return;
   }
 
@@ -535,6 +702,10 @@ async function handleLookupSubmit(event) {
   event.preventDefault();
   setFeedback('', 'secondary');
   if (!appReady) return;
+  if (!getSelectedPlayerSessionId()) {
+    setFeedback('Hãy chọn khung thời gian đăng ký trước khi nhập số điện thoại.', 'warning');
+    return;
+  }
   if (!canLookupPlayers(playerWindowConfig)) {
     setFeedback('Hiện chưa đến khung giờ cho phép truy suất player.', 'warning');
     return;
@@ -566,7 +737,7 @@ async function handleRegisterSubmit(event) {
     return;
   }
   try {
-    const response = await window.BadmintonBackend.registerPlayerAccess(player);
+    const response = await window.BadmintonBackend.registerPlayerAccess(player, getSelectedPlayerSessionId());
     const savedProfile = response && response.profile ? response.profile : null;
     const savedSession = response && response.sessionPlayer ? response.sessionPlayer : null;
     const successMessage = appendDuplicateNameNotice(
@@ -606,7 +777,7 @@ async function handleManageSubmit(event) {
     updatedAt: new Date().toISOString()
   };
   try {
-    const response = await window.BadmintonBackend.savePlayerAccess(nextPlayer);
+    const response = await window.BadmintonBackend.savePlayerAccess(nextPlayer, getSelectedPlayerSessionId());
     const savedProfile = response && response.profile ? response.profile : null;
     const savedSession = response && response.sessionPlayer ? response.sessionPlayer : null;
     setActivePlayerRecords(savedProfile, savedSession);
@@ -614,7 +785,7 @@ async function handleManageSubmit(event) {
     const successMessage = appendDuplicateNameNotice(
       wasRegisteredInCurrentSession
         ? (hasPlayStarted(playerWindowConfig) ? 'Đã cập nhật prefer và status thành công.' : 'Đã cập nhật prefer thành công.')
-        : 'Đăng ký lại thành công vào danh sách player hiện tại.',
+        : 'Đăng ký lại thành công vào danh sách player của khung thời gian đang chọn.',
       response
     );
     setFeedback(successMessage, 'success');
@@ -629,7 +800,7 @@ async function handleManageSubmit(event) {
 
 async function handleCancelRegistration() {
   if (!activeSessionPlayer || !activeSessionPlayer.id) {
-    setFeedback('Player này chưa có trong danh sách của đợt hiện tại để hủy.', 'warning');
+    setFeedback('Player này chưa có trong danh sách của khung thời gian đang chọn để hủy.', 'warning');
     return;
   }
   if (!canCancelRegisteredPlayers(playerWindowConfig)) {
@@ -641,6 +812,7 @@ async function handleCancelRegistration() {
   try {
     await window.BadmintonBackend.cancelPlayerAccess({
       phone,
+      sessionId: getSelectedPlayerSessionId(),
       sessionPlayerId: activeSessionPlayer.id
     });
     if (phone) {
@@ -649,7 +821,7 @@ async function handleCancelRegistration() {
       resetActivePlayerState();
       resetPlayerCards();
     }
-    const successMessage = 'Đã hủy đăng ký khỏi player session hiện tại.';
+    const successMessage = 'Đã hủy đăng ký khỏi khung thời gian đang chọn.';
     setFeedback(successMessage, 'success');
     showSuccessPopupWithTitle('Hủy đăng ký thành công', successMessage);
   } catch (error) {
@@ -664,6 +836,13 @@ function handleLogout() {
   setFeedback('', 'secondary');
 }
 
+async function handlePlayerSessionChange(event) {
+  const nextSessionId = event && event.target ? event.target.value : '';
+  await applySelectedPlayerSession(nextSessionId, {
+    showSelectionFeedback: true
+  });
+}
+
 async function startPlayerPage() {
   const warning = document.getElementById('playerConfigWarning');
   if (!window.BadmintonBackend || !window.BadmintonBackend.isConfigured) {
@@ -671,15 +850,22 @@ async function startPlayerPage() {
       warning.classList.remove('d-none');
       warning.textContent = window.BadmintonBackend ? window.BadmintonBackend.getMissingConfigMessage() : 'Backend chưa sẵn sàng.';
     }
+    renderPlayerSessionSelector();
     renderWindowBanner();
     updatePlayerAccessControls();
     return;
   }
 
-  await loadWindowConfig();
+  await refreshAvailablePlayerSessions({
+    preserveCurrentSelection: false,
+    showEmptyFeedback: false
+  });
   if (playerSettingsSubscription) playerSettingsSubscription();
   playerSettingsSubscription = window.BadmintonBackend.subscribeToAppConfig(async () => {
-    await loadWindowConfig();
+    await refreshAvailablePlayerSessions({
+      preserveCurrentSelection: true,
+      showEmptyFeedback: true
+    });
   });
 
   appReady = true;
@@ -692,6 +878,10 @@ const lookupForm = document.getElementById('playerLookupForm');
 if (lookupForm) lookupForm.addEventListener('submit', handleLookupSubmit);
 const registerForm = document.getElementById('playerRegisterForm');
 if (registerForm) registerForm.addEventListener('submit', handleRegisterSubmit);
+const playerSessionSelect = document.getElementById('playerSessionSelect');
+if (playerSessionSelect) playerSessionSelect.addEventListener('change', event => {
+  void handlePlayerSessionChange(event);
+});
 const registerNameInput = document.getElementById('registerName');
 if (registerNameInput) {
   registerNameInput.addEventListener('input', () => {

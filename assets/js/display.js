@@ -1,4 +1,5 @@
-const DISPLAY_COURT_NUMBERS = [9, 10, 11, 12];
+const DISPLAY_DEFAULT_COURT_START_NUMBER = 9;
+const DISPLAY_DEFAULT_COURT_COUNT = 4;
 
 let displayPlayers = [];
 let displayConfig = {
@@ -11,8 +12,42 @@ let displayConfigUnsubscribe = null;
 let displayRefreshTimer = null;
 const DISPLAY_REFRESH_INTERVAL_MS = 3000;
 
+function displayGetCourtCount() {
+  if (Array.isArray(displayConfig.courtEnabledStates) && displayConfig.courtEnabledStates.length) {
+    return displayConfig.courtEnabledStates.length;
+  }
+  if (Array.isArray(displayConfig.layoutState?.active_matches) && displayConfig.layoutState.active_matches.length) {
+    return displayConfig.layoutState.active_matches.length;
+  }
+  return DISPLAY_DEFAULT_COURT_COUNT;
+}
+
+function displayGetCourtNumbers() {
+  const count = displayGetCourtCount();
+  const remoteCourtNumbers = displayConfig.layoutState?.court_numbers;
+  if (Array.isArray(remoteCourtNumbers) && remoteCourtNumbers.length) {
+    return Array.from({ length: count }, (_, index) => {
+      const parsed = Number(remoteCourtNumbers[index]);
+      return Number.isFinite(parsed) && parsed > 0
+        ? parsed
+        : DISPLAY_DEFAULT_COURT_START_NUMBER + (count - 1 - index);
+    });
+  }
+
+  const remoteStart = displayConfig.layoutState?.court_number_start;
+  if (Number.isFinite(Number(remoteStart)) && Number(remoteStart) > 0) {
+    return Array.from({ length: count }, (_, index) => Number(remoteStart) + (count - 1 - index));
+  }
+
+  return Array.from({ length: count }, (_, index) => DISPLAY_DEFAULT_COURT_START_NUMBER + (count - 1 - index));
+}
+
+function displayGetCourtNumber(index) {
+  return displayGetCourtNumbers()[index] ?? (DISPLAY_DEFAULT_COURT_START_NUMBER + index);
+}
+
 function displayCourtLabel(index) {
-  return `Sân ${DISPLAY_COURT_NUMBERS[index] ?? (index + 1)}`;
+  return `Sân ${displayGetCourtNumber(index)}`;
 }
 
 function displayPlayerName(player) {
@@ -54,7 +89,7 @@ function displayStatusText() {
   if (!displayConfig.updatedAt) return 'Chưa có dữ liệu build sân.';
   const parsed = new Date(displayConfig.updatedAt);
   if (Number.isNaN(parsed.getTime())) return 'Đã tải dữ liệu sân.';
-  return `Cập nhật lúc ${parsed.toLocaleString('vi-VN')}`;
+  return `Cập nhật lúc ${parsed.toLocaleString('vi-VN')} | ${displayGetCourtCount()} sân | ${displayCourtLabel(displayGetCourtCount() - 1)} -> ${displayCourtLabel(0)}`;
 }
 
 function displayRenderCourt(index, matchSnapshot, playerMap) {
@@ -121,7 +156,7 @@ function displayRender() {
 
   const playerMap = displayBuildPlayerMap();
   const activeMatches = Array.isArray(displayConfig.layoutState?.active_matches) ? displayConfig.layoutState.active_matches : [];
-  courtsRow.innerHTML = DISPLAY_COURT_NUMBERS.map((_, index) => displayRenderCourt(index, activeMatches[index] || null, playerMap)).join('');
+  courtsRow.innerHTML = Array.from({ length: displayGetCourtCount() }, (_, index) => displayRenderCourt(index, activeMatches[index] || null, playerMap)).join('');
 }
 
 async function displayLoadAll() {
