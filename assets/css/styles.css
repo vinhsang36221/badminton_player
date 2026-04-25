@@ -1051,6 +1051,15 @@ body.player-popup-open {
 		max-width: 100%;
 	}
 
+	.display-shell .team-row .player-name {
+		font-size: clamp(0.95rem, 4vw, 1.15rem);
+		white-space: normal;
+		overflow: visible;
+		text-overflow: clip;
+		overflow-wrap: anywhere;
+		text-align: center;
+	}
+	
 	.display-shell .vs-col,
 	.display-shell .enter-col,
 	.display-shell .empty-slot {
