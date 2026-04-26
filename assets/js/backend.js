@@ -316,6 +316,16 @@
     if (error) throw error;
   }
 
+  async function deletePlayerSession(sessionId) {
+    const supabaseClient = getClient();
+    if (!supabaseClient || !sessionId) return;
+    const { error } = await supabaseClient
+      .from(PLAYER_SESSIONS_TABLE)
+      .delete()
+      .eq('id', sessionId);
+    if (error) throw error;
+  }
+
   async function deletePlayer(id) {
     const supabaseClient = getClient();
     if (!supabaseClient || !id) return;
@@ -537,6 +547,7 @@
     upsertPlayerProfiles: upsertPlayerProfiles,
     upsertPlayerProfile: upsertPlayerProfile,
     clearPlayers: clearPlayers,
+    deletePlayerSession: deletePlayerSession,
     deletePlayer: deletePlayer,
     fetchAppConfig: fetchAppConfig,
     subscribeToPlayers: subscribeToPlayers,
