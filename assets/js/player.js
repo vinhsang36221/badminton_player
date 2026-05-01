@@ -220,7 +220,7 @@ function formatRegisterNameDraftValue(value) {
 }
 
 function normalizePhoneInputValue(value) {
-  return String(value || '').replace(/\s+/g, '').trim();
+  return String(value || '').replace(/\D+/g, '').trim();
 }
 
 function getRegisterNameInput() {
