@@ -65,6 +65,13 @@ body { font-size: 14px; }
 	font-size:13px;
 	font-weight:600;
 }
+.player-name.touch-move-source,
+.player-drop-slot.touch-move-source,
+.empty-slot.touch-move-source {
+	outline: 3px solid #fdcc3a;
+	outline-offset: 2px;
+	border-radius: 8px;
+}
 .manual-match-card .card-body{ grid-template-columns: 1fr 60px 1fr auto; }
 
 #idlePlayers .badge { cursor: default; }
@@ -402,6 +409,39 @@ body { font-size: 14px; }
 		grid-column: span 1;
 		padding-bottom:0;
 	}
+}
+
+@media (min-width: 768px) and (max-width: 1199.98px){
+	body { font-size: 13px; }
+	.container { max-width: 100%; padding-left: 12px; padding-right: 12px; }
+	.top-header-actions { gap: 6px; }
+	.level-sync-toggle { min-width: 156px; }
+	.admin-fixed-panel-row { column-gap: 16px; row-gap: 12px; }
+	.admin-fixed-panel-col--wide { width: calc(68% - 8px); flex-basis: calc(68% - 8px); }
+	.admin-fixed-panel-col--narrow { width: calc(32% - 8px); flex-basis: calc(32% - 8px); }
+	.admin-panel--add-player,
+	.admin-panel--data-build,
+	.admin-panel--player-checkin,
+	.admin-panel--court-count { width: 100%; }
+	.admin-panel--add-player,
+	.admin-panel--data-build,
+	.admin-panel--player-checkin,
+	.admin-panel--court-count { height: auto; }
+	.admin-panel--player-checkin,
+	.admin-panel--court-count { min-height: 240px; }
+	.add-player-form {
+		grid-template-columns: minmax(0, 1.5fr) minmax(64px, 0.6fr) minmax(88px, 0.85fr) minmax(94px, 0.9fr) auto;
+		gap: 5px;
+	}
+	.add-player-form .form-control,
+	.add-player-form .form-select { font-size: 13px; padding-left: 0.5rem; padding-right: 0.5rem; }
+	.session-window-controls--horizontal { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+	.session-window-field--session-picker,
+	.session-window-switch { grid-column: span 2; }
+	.court-count-editor-row { grid-template-columns: 1fr; }
+	.court-count-editor-row .btn { width: 100%; }
+	.court-range-editor-row { grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); }
+	.court-range-editor-row .btn { grid-column: 1 / -1; width: 100%; }
 }
 
 /* Compact right panel that should not stretch to full column height */
@@ -1027,58 +1067,6 @@ body.player-popup-open {
 
 	.player-popup__message {
 		font-size: 0.95rem;
-	}
-
-	.display-shell .card-header {
-		padding: 14px 16px;
-	}
-
-	.display-shell .card-body,
-	.display-shell .manual-match-card .card-body {
-		padding: 18px 16px;
-		min-height: 0;
-		grid-template-columns: 1fr;
-		gap: 12px;
-	}
-
-	.display-shell .team-row {
-		min-height: 0;
-		flex-wrap: wrap;
-	}
-
-	.display-shell .team-row .player-name,
-	.display-shell .team-row .player-drop-slot {
-		max-width: 100%;
-	}
-
-	.display-shell .team-row .player-name {
-		font-size: clamp(0.95rem, 4vw, 1.15rem);
-		white-space: normal;
-		overflow: visible;
-		text-overflow: clip;
-		overflow-wrap: anywhere;
-		text-align: center;
-	}
-	
-	.display-shell .vs-col,
-	.display-shell .enter-col,
-	.display-shell .empty-slot {
-		grid-column: auto;
-		width: auto;
-		justify-self: center;
-	}
-
-	.display-shell .vs-col {
-		font-size: 1.35rem;
-	}
-
-	.display-shell .court-card .team-col {
-		font-size: clamp(1.35rem, 6vw, 1.75rem) !important;
-	}
-
-	.display-shell .empty-slot {
-		min-height: 72px;
-		font-size: 18px;
 	}
 }
 

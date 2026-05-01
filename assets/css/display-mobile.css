@@ -1,0 +1,53 @@
+@media (max-width: 767.98px) {
+	.display-shell .card-header {
+		padding: 14px 16px;
+	}
+
+	.display-shell .card-body,
+	.display-shell .manual-match-card .card-body {
+		padding: 18px 16px;
+		min-height: 0;
+		grid-template-columns: 1fr;
+		gap: 12px;
+	}
+
+	.display-shell .team-row {
+		min-height: 0;
+		flex-wrap: wrap;
+	}
+
+	.display-shell .team-row .player-name,
+	.display-shell .team-row .player-drop-slot {
+		max-width: 100%;
+	}
+
+	.display-shell .team-row .player-name {
+		font-size: clamp(0.95rem, 4vw, 1.15rem);
+		white-space: normal;
+		overflow: visible;
+		text-overflow: clip;
+		overflow-wrap: anywhere;
+		text-align: center;
+	}
+
+	.display-shell .vs-col,
+	.display-shell .enter-col,
+	.display-shell .empty-slot {
+		grid-column: auto;
+		width: auto;
+		justify-self: center;
+	}
+
+	.display-shell .vs-col {
+		font-size: 1.35rem;
+	}
+
+	.display-shell .court-card .team-col {
+		font-size: clamp(1.35rem, 6vw, 1.75rem) !important;
+	}
+
+	.display-shell .empty-slot {
+		min-height: 72px;
+		font-size: 18px;
+	}
+}

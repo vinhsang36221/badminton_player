@@ -34,6 +34,7 @@ let appReady = false;
 let playerSettingsSubscription = null;
 let duplicateNameCheckTimer = null;
 let duplicateNameCheckSequence = 0;
+let hasDuplicateRegisterName = false;
 const PLAYER_NAME_MAX_LENGTH = 13;
 
 function playerNow() {
@@ -218,6 +219,10 @@ function formatRegisterNameDraftValue(value) {
   return String(value || '').slice(0, PLAYER_NAME_MAX_LENGTH);
 }
 
+function normalizePhoneInputValue(value) {
+  return String(value || '').replace(/\s+/g, '').trim();
+}
+
 function getRegisterNameInput() {
   return document.getElementById('registerName');
 }
@@ -226,7 +231,18 @@ function getRegisterNameWarning() {
   return document.getElementById('registerNameWarning');
 }
 
+function getRegisterSubmitButton() {
+  return document.querySelector('#playerRegisterForm button[type="submit"]');
+}
+
+function syncRegisterSubmitButton() {
+  const registerSubmit = getRegisterSubmitButton();
+  if (!registerSubmit) return;
+  registerSubmit.disabled = !canRegisterNewPlayers(playerWindowConfig) || hasDuplicateRegisterName;
+}
+
 function clearDuplicateNameWarning() {
+  hasDuplicateRegisterName = false;
   const input = getRegisterNameInput();
   const warning = getRegisterNameWarning();
   if (input) input.classList.remove('player-name-duplicate');
@@ -234,9 +250,11 @@ function clearDuplicateNameWarning() {
     warning.classList.add('d-none');
     warning.textContent = '';
   }
+  syncRegisterSubmitButton();
 }
 
 function showDuplicateNameWarning(message) {
+  hasDuplicateRegisterName = true;
   const input = getRegisterNameInput();
   const warning = getRegisterNameWarning();
   if (input) input.classList.add('player-name-duplicate');
@@ -244,6 +262,7 @@ function showDuplicateNameWarning(message) {
     warning.classList.remove('d-none');
     warning.textContent = message;
   }
+  syncRegisterSubmitButton();
 }
 
 async function checkDuplicateRegisterNameNow() {
@@ -421,8 +440,8 @@ function updatePlayerAccessControls() {
   const manageReady = document.getElementById('manageReady');
   if (manageReady) manageReady.disabled = !allowStatusEdit;
 
-  const registerSubmit = document.querySelector('#playerRegisterForm button[type="submit"]');
-  if (registerSubmit) registerSubmit.disabled = !allowRegister;
+  const registerSubmit = getRegisterSubmitButton();
+  if (registerSubmit) registerSubmit.disabled = !allowRegister || hasDuplicateRegisterName;
 
   const manageSubmit = document.getElementById('playerManageSubmit');
   if (manageSubmit) manageSubmit.disabled = !allowManage;
@@ -441,7 +460,7 @@ function resetRegisterForm(phone = '') {
   clearDuplicateNameWarning();
 
   const registerPhone = document.getElementById('registerPhone');
-  if (registerPhone) registerPhone.value = phone || '';
+  if (registerPhone) registerPhone.value = normalizePhoneInputValue(phone || '');
 
   const registerSex = document.getElementById('registerSex');
   if (registerSex) registerSex.value = '';
@@ -665,10 +684,15 @@ async function lookupPlayerByPhone(phone) {
 function buildRegisteredPlayer() {
   const level = parseInt(document.getElementById('registerLevel').value, 10);
   const canEditStatus = hasPlayStarted(playerWindowConfig);
+  const registerPhone = document.getElementById('registerPhone');
+  const normalizedPhone = normalizePhoneInputValue(registerPhone ? registerPhone.value : '');
+  if (registerPhone && registerPhone.value !== normalizedPhone) {
+    registerPhone.value = normalizedPhone;
+  }
   return {
     id: createPlayerId(),
     name: document.getElementById('registerName').value.trim(),
-    phone: document.getElementById('registerPhone').value.trim(),
+    phone: normalizedPhone,
     gender: document.getElementById('registerSex').value,
     level: Number.isFinite(level) ? level : 4,
     prefer: document.getElementById('registerPrefer').value,
@@ -710,7 +734,11 @@ async function handleLookupSubmit(event) {
     setFeedback('Hiện chưa đến khung giờ cho phép truy suất player.', 'warning');
     return;
   }
-  const phone = document.getElementById('lookupPhone').value.trim();
+  const lookupPhoneInput = document.getElementById('lookupPhone');
+  const phone = normalizePhoneInputValue(lookupPhoneInput ? lookupPhoneInput.value : '');
+  if (lookupPhoneInput && lookupPhoneInput.value !== phone) {
+    lookupPhoneInput.value = phone;
+  }
   if (!phone) {
     setFeedback('Nhập số điện thoại trước.', 'warning');
     return;
@@ -729,6 +757,16 @@ async function handleRegisterSubmit(event) {
   event.preventDefault();
   if (!canRegisterNewPlayers(playerWindowConfig)) {
     setFeedback('Khung giờ đăng ký mới đã đóng.', 'warning');
+    return;
+  }
+  if (duplicateNameCheckTimer) {
+    window.clearTimeout(duplicateNameCheckTimer);
+    duplicateNameCheckTimer = null;
+  }
+  await checkDuplicateRegisterNameNow();
+  if (hasDuplicateRegisterName) {
+    setFeedback('Tên này đang bị trùng. Hãy đổi tên trước khi đăng ký.', 'warning');
+    getRegisterNameInput()?.focus();
     return;
   }
   const player = buildRegisteredPlayer();
@@ -909,6 +947,25 @@ if (registerNameInput) {
       return;
     }
     scheduleDuplicateRegisterNameCheck(true);
+  });
+}
+syncRegisterSubmitButton();
+const lookupPhoneInput = document.getElementById('lookupPhone');
+if (lookupPhoneInput) {
+  lookupPhoneInput.addEventListener('input', () => {
+    const normalizedPhone = normalizePhoneInputValue(lookupPhoneInput.value);
+    if (lookupPhoneInput.value !== normalizedPhone) {
+      lookupPhoneInput.value = normalizedPhone;
+    }
+  });
+}
+const registerPhoneInput = document.getElementById('registerPhone');
+if (registerPhoneInput) {
+  registerPhoneInput.addEventListener('input', () => {
+    const normalizedPhone = normalizePhoneInputValue(registerPhoneInput.value);
+    if (registerPhoneInput.value !== normalizedPhone) {
+      registerPhoneInput.value = normalizedPhone;
+    }
   });
 }
 const manageForm = document.getElementById('playerManageForm');

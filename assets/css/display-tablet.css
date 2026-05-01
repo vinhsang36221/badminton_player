@@ -1,0 +1,161 @@
+@media (min-width: 768px) and (max-width: 1279.98px) {
+	.display-page-container {
+		padding-left: 14px;
+		padding-right: 14px;
+	}
+
+	.display-shell {
+		max-width: 1120px;
+	}
+
+	.display-shell #courtsRow {
+		gap: 14px;
+	}
+
+	.display-shell .card {
+		border-radius: 18px;
+	}
+
+	.display-shell .card-header {
+		padding: 14px 18px;
+	}
+
+	.display-shell .card-body,
+	.display-shell .manual-match-card .card-body {
+		padding: 18px 18px;
+		min-height: 112px;
+		grid-template-columns: minmax(0, 1fr) 72px minmax(0, 1fr) auto;
+		gap: 10px;
+	}
+
+	.display-shell .team-row {
+		min-height: 60px;
+		gap: 10px;
+	}
+
+	.display-shell .team-row .player-name,
+	.display-shell .team-row .player-drop-slot {
+		max-width: calc(50% - 8px);
+	}
+
+	.display-shell .team-row .player-name {
+		font-size: clamp(1.5rem, 2vw, 1.85rem);
+	}
+
+	.display-shell .vs-col {
+		flex-basis: 72px;
+		width: 72px;
+		font-size: 1.7rem;
+	}
+
+	.display-shell .empty-slot {
+		min-height: 82px;
+		font-size: 20px;
+	}
+
+	.display-shell .waiting-pill {
+		min-width: 128px;
+		padding: 12px 18px;
+		font-size: 0.92rem;
+	}
+
+	.display-shell .court-card .card-header {
+		font-size: 0.98rem;
+	}
+
+	.display-shell .court-card .team-col {
+		font-size: clamp(1.7rem, 2.3vw, 2.15rem) !important;
+	}
+
+	.display-shell .badge {
+		font-size: 0.88rem;
+		padding: 8px 12px;
+	}
+}
+
+@media (min-width: 768px) and (max-width: 1024.98px) and (orientation: portrait) {
+	.display-page-container {
+		padding-left: 8px;
+		padding-right: 8px;
+	}
+
+	.display-shell {
+		max-width: none;
+	}
+
+	.display-shell #courtsRow {
+		gap: 10px;
+	}
+
+	.display-shell #displayStatusBanner {
+		padding: 7px 10px;
+		font-size: 0.88rem;
+	}
+
+	.display-shell .card-header {
+		padding: 12px 14px;
+	}
+
+	.display-shell .card-body,
+	.display-shell .manual-match-card .card-body {
+		padding: 14px 12px;
+		min-height: 92px;
+		grid-template-columns: minmax(0, 1fr) 46px minmax(0, 1fr) auto;
+		gap: 6px;
+	}
+
+	.display-shell .team-row {
+		min-height: 0;
+		gap: 6px;
+		align-items: center;
+	}
+
+	.display-shell .team-row .player-name,
+	.display-shell .team-row .player-drop-slot {
+		max-width: calc(50% - 4px);
+	}
+
+	.display-shell .team-row .player-name {
+		font-size: clamp(0.95rem, 2.35vw, 1.15rem);
+		white-space: normal;
+		overflow: visible;
+		text-overflow: clip;
+		overflow-wrap: anywhere;
+		text-align: center;
+	}
+
+	.display-shell .vs-col {
+		flex-basis: 46px;
+		width: 46px;
+		font-size: 1.1rem;
+	}
+
+	.display-shell .enter-col {
+		margin-left: 0 !important;
+	}
+
+	.display-shell .waiting-pill {
+		min-width: 92px;
+		padding: 8px 12px;
+		font-size: 0.78rem;
+	}
+
+	.display-shell .court-card .card-header {
+		font-size: 0.92rem;
+	}
+
+	.display-shell .court-card .team-col {
+		font-size: clamp(1.15rem, 3vw, 1.4rem) !important;
+		line-height: 1.08;
+	}
+
+	.display-shell .badge {
+		font-size: 0.8rem;
+		padding: 6px 10px;
+	}
+
+	.display-shell .empty-slot {
+		min-height: 70px;
+		font-size: 16px;
+	}
+}
