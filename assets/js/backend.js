@@ -301,6 +301,18 @@
   async function upsertPlayerProfiles(players) {
     return upsertTablePlayers(PLAYER_PROFILES_TABLE, players);
   }
+  async function syncPlayerProfilesFromSessionPlayers(sessionIds) {
+    const supabaseClient = getClient();
+    const normalizedSessionIds = Array.isArray(sessionIds)
+      ? sessionIds.map(id => String(id || '').trim()).filter(Boolean)
+      : [];
+    if (!supabaseClient || !normalizedSessionIds.length) return 0;
+    const { data, error } = await supabaseClient.rpc('sync_player_profiles_from_session_players', {
+      p_session_ids: normalizedSessionIds
+    });
+    if (error) throw error;
+    return Number.isFinite(Number(data)) ? Number(data) : 0;
+  }
 
   async function upsertPlayerProfile(player) {
     return upsertTablePlayer(PLAYER_PROFILES_TABLE, player);
@@ -545,6 +557,7 @@
     upsertPlayers: upsertPlayers,
     upsertPlayer: upsertPlayer,
     upsertPlayerProfiles: upsertPlayerProfiles,
+    syncPlayerProfilesFromSessionPlayers: syncPlayerProfilesFromSessionPlayers,
     upsertPlayerProfile: upsertPlayerProfile,
     clearPlayers: clearPlayers,
     deletePlayerSession: deletePlayerSession,
