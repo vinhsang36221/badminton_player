@@ -30,6 +30,77 @@
 		text-align: center;
 	}
 
+	body.bg-light #courtsRow .court-card .card-body,
+	body.bg-light #courtsRow .court-card.manual-match-card .card-body {
+		grid-template-columns: minmax(0, 1fr) 38px minmax(0, 1fr);
+		gap: 8px;
+	}
+
+	body.bg-light #courtsRow .court-card .team-col {
+		font-size: 18px !important;
+	}
+
+	body.bg-light #courtsRow .court-card .team-row {
+		flex-direction: row;
+		gap: 6px;
+		align-items: center;
+		justify-content: center;
+	}
+
+	body.bg-light #courtsRow .court-card .team-player-stack {
+		display: flex;
+		flex-direction: column;
+		gap: 3px;
+		align-items: center;
+		justify-content: center;
+		width: 100%;
+	}
+
+	body.bg-light #courtsRow .court-card .team-player-stack .sep {
+		display: none;
+	}
+
+	body.bg-light #courtsRow .court-card .team-row .sep {
+		display: none;
+	}
+
+	body.bg-light #courtsRow .court-card .team-player-stack .player-name,
+	body.bg-light #courtsRow .court-card .team-player-stack .player-drop-slot {
+		max-width: 100%;
+		min-width: 0;
+		font-size: 0.78em !important;
+		line-height: 1.1;
+		white-space: nowrap;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		text-align: center;
+	}
+
+	body.bg-light #courtsRow .court-card .vs-col {
+		font-size: 1rem;
+		padding-left: 0 !important;
+		padding-right: 0 !important;
+	}
+
+	body.bg-light #courtsRow .court-card .match-handle-card {
+		margin-right: 0 !important;
+		margin-bottom: 0;
+		flex: 0 0 auto;
+	}
+
+	body.bg-light #courtsRow .court-card .enter-col {
+		grid-column: 1 / -1;
+		grid-row: 2;
+		justify-self: center;
+		margin-left: 0 !important;
+	}
+
+	body.bg-light #courtsRow .court-card .btn-enter-score {
+		font-size: 0.5rem !important;
+		padding: 0.18rem 0.42rem !important;
+		line-height: 1.1;
+	}
+
 	.display-shell .vs-col,
 	.display-shell .enter-col,
 	.display-shell .empty-slot {

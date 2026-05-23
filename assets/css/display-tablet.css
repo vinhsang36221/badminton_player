@@ -71,6 +71,49 @@
 		font-size: 0.88rem;
 		padding: 8px 12px;
 	}
+
+	body.bg-light #courtsRow .court-card .team-col {
+		font-size: 27px !important;
+	}
+
+	body.bg-light #courtsRow .court-card .team-row {
+		flex-direction: row;
+		gap: 8px;
+		align-items: center;
+		justify-content: center;
+	}
+
+	body.bg-light #courtsRow .court-card .team-player-stack {
+		display: flex;
+		flex-direction: column;
+		gap: 4px;
+		align-items: center;
+		justify-content: center;
+		width: 100%;
+	}
+
+	body.bg-light #courtsRow .court-card .team-player-stack .sep,
+	body.bg-light #courtsRow .court-card .team-row .sep {
+		display: none;
+	}
+
+	body.bg-light #courtsRow .court-card .team-player-stack .player-name,
+	body.bg-light #courtsRow .court-card .team-player-stack .player-drop-slot {
+		max-width: 100%;
+		min-width: 0;
+		font-size: 1em !important;
+		line-height: normal;
+		white-space: nowrap;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		text-align: center;
+	}
+
+	body.bg-light #courtsRow .court-card .team-player-stack .player-name {
+		display: block;
+		padding: 0;
+		vertical-align: middle;
+	}
 }
 
 @media (min-width: 768px) and (max-width: 1024.98px) and (orientation: portrait) {
@@ -157,5 +200,48 @@
 	.display-shell .empty-slot {
 		min-height: 70px;
 		font-size: 16px;
+	}
+
+	body.bg-light #courtsRow .court-card .team-col {
+		font-size: 27px !important;
+	}
+
+	body.bg-light #courtsRow .court-card .team-row {
+		flex-direction: row;
+		gap: 6px;
+		align-items: center;
+		justify-content: center;
+	}
+
+	body.bg-light #courtsRow .court-card .team-player-stack {
+		display: flex;
+		flex-direction: column;
+		gap: 3px;
+		align-items: center;
+		justify-content: center;
+		width: 100%;
+	}
+
+	body.bg-light #courtsRow .court-card .team-player-stack .sep,
+	body.bg-light #courtsRow .court-card .team-row .sep {
+		display: none;
+	}
+
+	body.bg-light #courtsRow .court-card .team-player-stack .player-name,
+	body.bg-light #courtsRow .court-card .team-player-stack .player-drop-slot {
+		max-width: 100%;
+		min-width: 0;
+		font-size: 1em !important;
+		line-height: normal;
+		white-space: nowrap;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		text-align: center;
+	}
+
+	body.bg-light #courtsRow .court-card .team-player-stack .player-name {
+		display: block;
+		padding: 0;
+		vertical-align: middle;
 	}
 }
