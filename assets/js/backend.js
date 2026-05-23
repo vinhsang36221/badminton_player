@@ -42,6 +42,20 @@
     return text || null;
   }
 
+  function tableHasSessionId(tableName) {
+    return tableName === SESSION_PLAYERS_TABLE;
+  }
+
+  function levelBaseRating(level) {
+    const parsedLevel = Number.isFinite(Number(level)) ? Number(level) : 4;
+    return parsedLevel * 100;
+  }
+
+  function getPlayerLevelFromRating(rating) {
+    const normalizedRating = Number.isFinite(Number(rating)) ? Number(rating) : levelBaseRating(1);
+    return Math.min(10, Math.max(1, Math.floor(normalizedRating / 100)));
+  }
+
   function cloneArray(value) {
     return Array.isArray(value) ? JSON.parse(JSON.stringify(value)) : [];
   }
@@ -113,12 +127,11 @@
     };
   }
 
-  function toPlayerPayload(player, sessionId) {
+  function toPlayerPayload(tableName, player, sessionId) {
     const level = Number.isFinite(Number(player.level)) ? Number(player.level) : 4;
     const rating = Number.isFinite(Number(player.rating)) ? Number(player.rating) : level * 100;
-    return {
+    const payload = {
       id: player.id,
-      session_id: sessionId || player.sessionId || null,
       name: player.name || '',
       phone: normalizePhone(player.phone),
       gender: player.gender || 'male',
@@ -133,6 +146,12 @@
       created_at: player.createdAt || isoNow(),
       updated_at: player.updatedAt || isoNow()
     };
+
+    if (tableHasSessionId(tableName)) {
+      payload.session_id = sessionId || player.sessionId || null;
+    }
+
+    return payload;
   }
 
   function defaultConfigRow() {
@@ -174,7 +193,7 @@
     let query = supabaseClient
       .from(tableName)
       .select('*');
-    if (options.sessionId) query = query.eq('session_id', options.sessionId);
+    if (options.sessionId && tableHasSessionId(tableName)) query = query.eq('session_id', options.sessionId);
     const { data, error } = await query
       .order('created_at', { ascending: true })
       .order('name', { ascending: true });
@@ -191,7 +210,7 @@
       .from(tableName)
       .select('*')
       .eq('phone', normalizedPhone);
-    if (options.sessionId) query = query.eq('session_id', options.sessionId);
+    if (options.sessionId && tableHasSessionId(tableName)) query = query.eq('session_id', options.sessionId);
     const { data, error } = await query.maybeSingle();
     if (error) throw error;
     return mapRemotePlayer(data);
@@ -200,7 +219,7 @@
   async function upsertTablePlayers(tableName, players, options = {}) {
     const supabaseClient = getClient();
     if (!supabaseClient) return [];
-    const payload = (players || []).map(player => toPlayerPayload(player, options.sessionId));
+    const payload = (players || []).map(player => toPlayerPayload(tableName, player, options.sessionId));
     if (!payload.length) return [];
     const { error } = await supabaseClient.from(tableName).upsert(payload, { onConflict: 'id' });
     if (error) throw error;
@@ -210,7 +229,7 @@
   async function upsertTablePlayer(tableName, player, options = {}) {
     const supabaseClient = getClient();
     if (!supabaseClient) return null;
-    const payload = toPlayerPayload(player, options.sessionId);
+    const payload = toPlayerPayload(tableName, player, options.sessionId);
     const { data, error } = await supabaseClient
       .from(tableName)
       .upsert(payload, { onConflict: 'id' })
@@ -301,17 +320,73 @@
   async function upsertPlayerProfiles(players) {
     return upsertTablePlayers(PLAYER_PROFILES_TABLE, players);
   }
+
+  function buildProfileSyncUpdate(profilePlayer, sessionPlayer) {
+    const profileRating = Number.isFinite(Number(profilePlayer?.rating))
+      ? Number(profilePlayer.rating)
+      : levelBaseRating(profilePlayer?.level || sessionPlayer?.level || 4);
+    const sessionRating = Number.isFinite(Number(sessionPlayer?.rating))
+      ? Number(sessionPlayer.rating)
+      : profileRating;
+    const sessionDelta = sessionRating - profileRating;
+    const profileDelta = Math.round(sessionDelta / 10);
+    const nextRating = profileRating + profileDelta;
+    const nowIso = isoNow();
+
+    return {
+      ...(profilePlayer || sessionPlayer || {}),
+      id: profilePlayer?.id || sessionPlayer?.id,
+      sessionId: profilePlayer?.sessionId || null,
+      name: profilePlayer?.name || sessionPlayer?.name || '',
+      phone: profilePlayer?.phone || sessionPlayer?.phone || '',
+      gender: profilePlayer?.gender || sessionPlayer?.gender || 'male',
+      prefer: profilePlayer?.prefer || sessionPlayer?.prefer || 'normal',
+      ready: profilePlayer?.ready !== false,
+      level: getPlayerLevelFromRating(nextRating),
+      rating: nextRating,
+      couple: profilePlayer?.couple ?? sessionPlayer?.couple ?? null,
+      unpair: profilePlayer?.unpair ?? sessionPlayer?.unpair ?? null,
+      unpairMain: profilePlayer?.unpairMain ?? sessionPlayer?.unpairMain ?? false,
+      partnerSlot: profilePlayer?.partnerSlot ?? sessionPlayer?.partnerSlot ?? null,
+      createdAt: profilePlayer?.createdAt || sessionPlayer?.createdAt || nowIso,
+      updatedAt: nowIso
+    };
+  }
+
   async function syncPlayerProfilesFromSessionPlayers(sessionIds) {
-    const supabaseClient = getClient();
     const normalizedSessionIds = Array.isArray(sessionIds)
       ? sessionIds.map(id => String(id || '').trim()).filter(Boolean)
       : [];
-    if (!supabaseClient || !normalizedSessionIds.length) return 0;
-    const { data, error } = await supabaseClient.rpc('sync_player_profiles_from_session_players', {
-      p_session_ids: normalizedSessionIds
-    });
-    if (error) throw error;
-    return Number.isFinite(Number(data)) ? Number(data) : 0;
+    if (!getClient() || !normalizedSessionIds.length) return 0;
+
+    const existingProfiles = await fetchPlayerProfiles();
+    const profileById = new Map(existingProfiles.map(player => [player.id, player]));
+    const profileByPhone = new Map(
+      existingProfiles
+        .filter(player => normalizePhone(player.phone))
+        .map(player => [normalizePhone(player.phone), player])
+    );
+    const profileUpdates = [];
+
+    for (const sessionId of normalizedSessionIds) {
+      const sessionPlayers = await fetchTablePlayers(SESSION_PLAYERS_TABLE, { sessionId });
+      sessionPlayers.forEach(sessionPlayer => {
+        const normalizedPhone = normalizePhone(sessionPlayer?.phone);
+        if (!normalizedPhone) return;
+
+        const profilePlayer = profileById.get(sessionPlayer.id) || profileByPhone.get(normalizedPhone) || null;
+        if (!profilePlayer) return;
+
+        const nextProfile = buildProfileSyncUpdate(profilePlayer, sessionPlayer);
+        profileUpdates.push(nextProfile);
+        profileById.set(nextProfile.id, nextProfile);
+        profileByPhone.set(normalizedPhone, nextProfile);
+      });
+    }
+
+    if (!profileUpdates.length) return 0;
+    await upsertPlayerProfiles(profileUpdates);
+    return profileUpdates.length;
   }
 
   async function upsertPlayerProfile(player) {
