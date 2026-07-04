@@ -54,7 +54,6 @@
   function resolveRatingAccumulated(source, level) {
     if (Number.isFinite(Number(source?.ratingAccumulated))) return Number(source.ratingAccumulated);
     if (Number.isFinite(Number(source?.rating_accumulated))) return Number(source.rating_accumulated);
-    if (Number.isFinite(Number(source?.rating))) return Number(source.rating) - levelBaseRating(level);
     return 0;
   }
 
@@ -96,7 +95,7 @@
       prefer: row.prefer || 'normal',
       ready: row.ready !== false,
       ratingAccumulated,
-      rating: levelBaseRating(level) + ratingAccumulated,
+      rating: levelBaseRating(level),
       couple: toNullableInteger(row.couple),
       unpair: toNullableInteger(row.unpair),
       unpairMain: !!row.unpair_main,
@@ -138,7 +137,7 @@
   function toPlayerPayload(tableName, player, sessionId) {
     const level = Number.isFinite(Number(player.level)) ? Number(player.level) : 4;
     const ratingAccumulated = resolveRatingAccumulated(player, level);
-    const rating = levelBaseRating(level) + ratingAccumulated;
+    const rating = levelBaseRating(level);
     const payload = {
       id: player.id,
       name: player.name || '',
@@ -343,7 +342,7 @@
     const sessionDelta = sessionAccumulated - profileAccumulated;
     const profileDelta = Math.round(sessionDelta / 10);
     const nextRatingAccumulated = profileAccumulated + profileDelta;
-    const nextRating = levelBaseRating(profileLevel) + nextRatingAccumulated;
+    const nextRating = levelBaseRating(profileLevel);
     const nowIso = isoNow();
 
     return {

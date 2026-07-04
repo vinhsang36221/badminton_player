@@ -547,14 +547,9 @@ function mergePlayerRecords(profile, sessionPlayer) {
   const rawRatingAccumulated = sessionPlayer && Number.isFinite(Number(sessionPlayer.ratingAccumulated))
     ? Number(sessionPlayer.ratingAccumulated)
     : (profile && Number.isFinite(Number(profile.ratingAccumulated)) ? Number(profile.ratingAccumulated) : null);
-  const rawRating = sessionPlayer && Number.isFinite(Number(sessionPlayer.rating))
-    ? Number(sessionPlayer.rating)
-    : (profile && Number.isFinite(Number(profile.rating)) ? Number(profile.rating) : null);
   const ratingAccumulated = Number.isFinite(Number(rawRatingAccumulated))
     ? Number(rawRatingAccumulated)
-    : (Number.isFinite(Number(rawRating))
-      ? Number(rawRating) - (level * 100)
-      : 0);
+    : 0;
   return {
     ...(profile || {}),
     ...(sessionPlayer || {}),
@@ -566,7 +561,7 @@ function mergePlayerRecords(profile, sessionPlayer) {
     prefer: (sessionPlayer && sessionPlayer.prefer) || (profile && profile.prefer) || 'normal',
     ready: sessionPlayer ? sessionPlayer.ready !== false : (profile ? profile.ready === true : false),
     ratingAccumulated,
-    rating: (level * 100) + ratingAccumulated,
+    rating: level * 100,
     createdAt: (profile && profile.createdAt) || (sessionPlayer && sessionPlayer.createdAt) || null,
     updatedAt: (sessionPlayer && sessionPlayer.updatedAt) || (profile && profile.updatedAt) || null
   };
