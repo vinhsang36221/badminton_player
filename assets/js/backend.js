@@ -51,9 +51,11 @@
     return parsedLevel * 100;
   }
 
-  function getPlayerLevelFromRating(rating) {
-    const normalizedRating = Number.isFinite(Number(rating)) ? Number(rating) : levelBaseRating(1);
-    return Math.min(10, Math.max(1, Math.floor(normalizedRating / 100)));
+  function resolveRatingAccumulated(source, level) {
+    if (Number.isFinite(Number(source?.ratingAccumulated))) return Number(source.ratingAccumulated);
+    if (Number.isFinite(Number(source?.rating_accumulated))) return Number(source.rating_accumulated);
+    if (Number.isFinite(Number(source?.rating))) return Number(source.rating) - levelBaseRating(level);
+    return 0;
   }
 
   function cloneArray(value) {
@@ -71,6 +73,7 @@
       && row.prefer == null
       && row.ready == null
       && row.rating == null
+      && row.rating_accumulated == null
       && row.couple == null
       && row.unpair == null
       && row.unpair_main == null
@@ -81,16 +84,19 @@
 
   function mapRemotePlayer(row) {
     if (!row || isEmptyRemotePlayerRow(row)) return null;
+    const level = Number.isFinite(Number(row.level)) ? Number(row.level) : 4;
+    const ratingAccumulated = resolveRatingAccumulated(row, level);
     return {
       id: row.id,
       sessionId: row.session_id || null,
       name: row.name || '',
       phone: row.phone || '',
       gender: row.gender || 'male',
-      level: Number.isFinite(Number(row.level)) ? Number(row.level) : 4,
+      level,
       prefer: row.prefer || 'normal',
       ready: row.ready !== false,
-      rating: Number.isFinite(Number(row.rating)) ? Number(row.rating) : (Number(row.level) || 4) * 100,
+      ratingAccumulated,
+      rating: levelBaseRating(level) + ratingAccumulated,
       couple: toNullableInteger(row.couple),
       unpair: toNullableInteger(row.unpair),
       unpairMain: !!row.unpair_main,
@@ -131,7 +137,8 @@
 
   function toPlayerPayload(tableName, player, sessionId) {
     const level = Number.isFinite(Number(player.level)) ? Number(player.level) : 4;
-    const rating = Number.isFinite(Number(player.rating)) ? Number(player.rating) : level * 100;
+    const ratingAccumulated = resolveRatingAccumulated(player, level);
+    const rating = levelBaseRating(level) + ratingAccumulated;
     const payload = {
       id: player.id,
       name: player.name || '',
@@ -140,6 +147,7 @@
       level,
       prefer: player.prefer || 'normal',
       ready: player.ready !== false,
+      rating_accumulated: ratingAccumulated,
       rating,
       couple: player.couple === undefined ? null : player.couple,
       unpair: player.unpair === undefined ? null : player.unpair,
@@ -327,15 +335,15 @@
   }
 
   function buildProfileSyncUpdate(profilePlayer, sessionPlayer) {
-    const profileRating = Number.isFinite(Number(profilePlayer?.rating))
-      ? Number(profilePlayer.rating)
-      : levelBaseRating(profilePlayer?.level || sessionPlayer?.level || 4);
-    const sessionRating = Number.isFinite(Number(sessionPlayer?.rating))
-      ? Number(sessionPlayer.rating)
-      : profileRating;
-    const sessionDelta = sessionRating - profileRating;
+    const profileLevel = Number.isFinite(Number(profilePlayer?.level))
+      ? Number(profilePlayer.level)
+      : (Number.isFinite(Number(sessionPlayer?.level)) ? Number(sessionPlayer.level) : 4);
+    const profileAccumulated = resolveRatingAccumulated(profilePlayer, profileLevel);
+    const sessionAccumulated = resolveRatingAccumulated(sessionPlayer, sessionPlayer?.level || profileLevel);
+    const sessionDelta = sessionAccumulated - profileAccumulated;
     const profileDelta = Math.round(sessionDelta / 10);
-    const nextRating = profileRating + profileDelta;
+    const nextRatingAccumulated = profileAccumulated + profileDelta;
+    const nextRating = levelBaseRating(profileLevel) + nextRatingAccumulated;
     const nowIso = isoNow();
 
     return {
@@ -347,7 +355,8 @@
       gender: profilePlayer?.gender || sessionPlayer?.gender || 'male',
       prefer: profilePlayer?.prefer || sessionPlayer?.prefer || 'normal',
       ready: profilePlayer?.ready !== false,
-      level: getPlayerLevelFromRating(nextRating),
+      level: profileLevel,
+      ratingAccumulated: nextRatingAccumulated,
       rating: nextRating,
       couple: profilePlayer?.couple ?? sessionPlayer?.couple ?? null,
       unpair: profilePlayer?.unpair ?? sessionPlayer?.unpair ?? null,

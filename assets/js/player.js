@@ -541,6 +541,20 @@ function resetActivePlayerState() {
 function mergePlayerRecords(profile, sessionPlayer) {
   const source = sessionPlayer || profile;
   if (!source) return null;
+  const level = Number.isFinite(Number((sessionPlayer && sessionPlayer.level) || (profile && profile.level)))
+    ? Number((sessionPlayer && sessionPlayer.level) || (profile && profile.level))
+    : 4;
+  const rawRatingAccumulated = sessionPlayer && Number.isFinite(Number(sessionPlayer.ratingAccumulated))
+    ? Number(sessionPlayer.ratingAccumulated)
+    : (profile && Number.isFinite(Number(profile.ratingAccumulated)) ? Number(profile.ratingAccumulated) : null);
+  const rawRating = sessionPlayer && Number.isFinite(Number(sessionPlayer.rating))
+    ? Number(sessionPlayer.rating)
+    : (profile && Number.isFinite(Number(profile.rating)) ? Number(profile.rating) : null);
+  const ratingAccumulated = Number.isFinite(Number(rawRatingAccumulated))
+    ? Number(rawRatingAccumulated)
+    : (Number.isFinite(Number(rawRating))
+      ? Number(rawRating) - (level * 100)
+      : 0);
   return {
     ...(profile || {}),
     ...(sessionPlayer || {}),
@@ -548,14 +562,11 @@ function mergePlayerRecords(profile, sessionPlayer) {
     name: (sessionPlayer && sessionPlayer.name) || (profile && profile.name) || '',
     phone: (sessionPlayer && sessionPlayer.phone) || (profile && profile.phone) || '',
     gender: (sessionPlayer && sessionPlayer.gender) || (profile && profile.gender) || 'male',
-    level: Number.isFinite(Number((sessionPlayer && sessionPlayer.level) || (profile && profile.level)))
-      ? Number((sessionPlayer && sessionPlayer.level) || (profile && profile.level))
-      : 4,
+    level,
     prefer: (sessionPlayer && sessionPlayer.prefer) || (profile && profile.prefer) || 'normal',
     ready: sessionPlayer ? sessionPlayer.ready !== false : (profile ? profile.ready === true : false),
-    rating: Number.isFinite(Number((sessionPlayer && sessionPlayer.rating) || (profile && profile.rating)))
-      ? Number((sessionPlayer && sessionPlayer.rating) || (profile && profile.rating))
-      : (Number.isFinite(Number(source.level)) ? Number(source.level) : 4) * 100,
+    ratingAccumulated,
+    rating: (level * 100) + ratingAccumulated,
     createdAt: (profile && profile.createdAt) || (sessionPlayer && sessionPlayer.createdAt) || null,
     updatedAt: (sessionPlayer && sessionPlayer.updatedAt) || (profile && profile.updatedAt) || null
   };
@@ -720,6 +731,7 @@ function buildRegisteredPlayer() {
     level: Number.isFinite(level) ? level : 4,
     prefer: document.getElementById('registerPrefer').value,
     ready: canEditStatus ? document.getElementById('registerReady').value === 'ready' : false,
+    ratingAccumulated: 0,
     rating: (Number.isFinite(level) ? level : 4) * 100,
     matches: 0,
     couple: null,
@@ -829,7 +841,12 @@ async function handleManageSubmit(event) {
     phone: activePlayer.phone,
     gender: activePlayer.gender,
     level: Number.isFinite(Number(activePlayer.level)) ? Number(activePlayer.level) : 4,
-    rating: Number.isFinite(Number(activePlayer.rating)) ? Number(activePlayer.rating) : ((Number.isFinite(Number(activePlayer.level)) ? Number(activePlayer.level) : 4) * 100),
+    ratingAccumulated: Number.isFinite(Number(activePlayer.ratingAccumulated))
+      ? Number(activePlayer.ratingAccumulated)
+      : (Number.isFinite(Number(activePlayer.rating)) ? Number(activePlayer.rating) - ((Number.isFinite(Number(activePlayer.level)) ? Number(activePlayer.level) : 4) * 100) : 0),
+    rating: ((Number.isFinite(Number(activePlayer.level)) ? Number(activePlayer.level) : 4) * 100) + (Number.isFinite(Number(activePlayer.ratingAccumulated))
+      ? Number(activePlayer.ratingAccumulated)
+      : (Number.isFinite(Number(activePlayer.rating)) ? Number(activePlayer.rating) - ((Number.isFinite(Number(activePlayer.level)) ? Number(activePlayer.level) : 4) * 100) : 0)),
     prefer: document.getElementById('managePrefer').value,
     ready: hasPlayStarted(playerWindowConfig)
       ? document.getElementById('manageReady').value === 'ready'
