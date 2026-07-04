@@ -48,6 +48,37 @@ body { font-size: 14px; }
 .team-row .sep{ padding:0 6px; color:rgba(0,0,0,0.6); }
 .enter-col { grid-column: 4; }
 
+body.bg-light #courtsRow .court-card .team-player-stack {
+	display: flex;
+	flex-direction: column;
+	gap: 4px;
+	align-items: center;
+	justify-content: center;
+	width: 100%;
+	min-width: 0;
+}
+
+body.bg-light #courtsRow .court-card .team-player-stack .sep {
+	display: none;
+}
+
+body.bg-light #courtsRow .court-card .team-player-stack .player-name {
+	display: block;
+	max-width: 100%;
+	min-width: 0;
+	white-space: normal;
+	overflow: visible;
+	text-overflow: clip;
+	overflow-wrap: anywhere;
+	text-align: center;
+	line-height: 1.2;
+}
+
+body.bg-light #courtsRow .court-card .team-player-stack .player-drop-slot {
+	max-width: 100%;
+	min-width: 0;
+}
+
 /* Empty slot that spans the three team columns and centers its text */
 .empty-slot{ grid-column: 1 / 4; display:flex; align-items:center; justify-content:center; min-height:56px; font-size:20px; color:rgba(0,0,0,0.7); }
 .empty-slot-off{ background:#f3f4f6; color:#6c757d; font-size:16px; font-weight:700; }
@@ -195,11 +226,6 @@ body { font-size: 14px; }
 .court-switch:focus-visible { outline: 2px solid rgba(13, 110, 253, 0.45); outline-offset: 2px; border-radius: 999px; }
 .court-switch-static { cursor: default; pointer-events: none; }
 
-.level-sync-toggle { min-width: 180px; }
-.level-sync-toggle-on { background-color: #198754 !important; color: #fff !important; }
-.level-sync-toggle-off { background-color: #dc3545 !important; color: #fff !important; }
-.level-sync-status { font-size: 12px; color: #6c757d; line-height: 1.35; text-align: right; }
-
 /* Prefer states */
 .prefer-chill { background-color: #c8facc !important; color: #064e14 !important; }
 .prefer-normal { background-color: #fff3bf !important; color: #614700 !important; }
@@ -278,24 +304,27 @@ body { font-size: 14px; }
 	max-width:none;
 }
 
-.admin-panel--add-player{
-	width:var(--admin-add-player-width);
-	height:var(--admin-add-player-height);
-}
+/* Laptop/desktop admin layout only. Edits here do not apply to tablet/mobile. */
+@media (min-width: 1200px){
+	.admin-panel--add-player{
+		width:var(--admin-add-player-width);
+		height:var(--admin-add-player-height);
+	}
 
-.admin-panel--data-build{
-	width:var(--admin-data-build-width);
-	height:var(--admin-data-build-height);
-}
+	.admin-panel--data-build{
+		width:var(--admin-data-build-width);
+		height:var(--admin-data-build-height);
+	}
 
-.admin-panel--player-checkin{
-	width:var(--admin-player-checkin-width);
-	height:var(--admin-player-checkin-height);
-}
+	.admin-panel--player-checkin{
+		width:var(--admin-player-checkin-width);
+		height:var(--admin-player-checkin-height);
+	}
 
-.admin-panel--court-count{
-	width:var(--admin-court-count-width);
-	height:var(--admin-court-count-height);
+	.admin-panel--court-count{
+		width:var(--admin-court-count-width);
+		height:var(--admin-court-count-height);
+	}
 }
 
 /* Add Player form: distribute controls and keep Add button flush-right */
@@ -327,10 +356,9 @@ body { font-size: 14px; }
 
 .court-range-editor-row{
 	display:grid;
-	grid-template-columns: 106px auto 106px auto;
+	grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
 	gap:8px;
 	align-items:center;
-	justify-content:flex-start;
 }
 
 .court-range-separator{
@@ -341,6 +369,21 @@ body { font-size: 14px; }
 
 .court-range-editor-row .btn{
 	white-space:nowrap;
+	grid-column: 1 / -1;
+	width:100%;
+}
+
+/* Laptop/desktop court range layout only. */
+@media (min-width: 1200px){
+	.court-range-editor-row{
+		grid-template-columns: 131px auto 131px auto;
+		justify-content:flex-start;
+	}
+
+	.court-range-editor-row .btn{
+		grid-column:auto;
+		width:auto;
+	}
 }
 
 .court-label-display{
@@ -463,7 +506,6 @@ body { font-size: 14px; }
 	body { font-size: 13px; }
 	.container { max-width: 100%; padding-left: 12px; padding-right: 12px; }
 	.top-header-actions { gap: 6px; }
-	.level-sync-toggle { min-width: 156px; }
 	.admin-fixed-panel-row { column-gap: 16px; row-gap: 12px; }
 	.admin-fixed-panel-col--wide { width: calc(68% - 8px); flex-basis: calc(68% - 8px); }
 	.admin-fixed-panel-col--narrow { width: calc(32% - 8px); flex-basis: calc(32% - 8px); }
@@ -591,6 +633,59 @@ body { font-size: 14px; }
 /* player name color by gender (use same background colors as button variants) */
 .player-name.male { color: #0f57b7 !important; }
 .player-name.female { color: #b23a7a !important; }
+
+.player-name.player-name-with-stats {
+	position: relative;
+	padding-left: 0;
+	padding-top: 0;
+	padding-right: 0;
+	padding-bottom: 0;
+	min-height: 1em;
+}
+
+.player-name.player-name-with-stats .player-name-text {
+	display: inline;
+}
+
+.player-name.player-name-with-stats .player-level-tag {
+	position: static;
+	display: inline-block;
+	min-width: 0;
+	height: auto;
+	padding: 0;
+	border-radius: 0;
+	background: transparent;
+	color: #212529;
+	font-size: 0.34em;
+	font-weight: 800;
+	line-height: 1;
+	margin-right: 0.02em;
+	box-shadow: none;
+	pointer-events: none;
+	transform: translateY(0.35em);
+	vertical-align: baseline;
+}
+
+.player-name.player-name-with-stats .player-match-tag {
+	position: static;
+	display: inline-block;
+	align-items: center;
+	justify-content: center;
+	min-width: 0;
+	height: auto;
+	padding: 0;
+	border-radius: 0;
+	background: transparent;
+	color: #212529;
+	font-size: 0.34em;
+	font-weight: 800;
+	line-height: 1;
+	margin-left: 0.02em;
+	box-shadow: none;
+	pointer-events: none;
+	transform: translateY(0.35em);
+	vertical-align: baseline;
+}
 
 /* Partner select styled to match other admin buttons */
 .partner-btn {

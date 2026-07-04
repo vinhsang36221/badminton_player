@@ -127,10 +127,14 @@ function escapeOptionLabel(value) {
   }[character]));
 }
 
+function getSessionLocationLabel(session) {
+  return session && session.location ? session.location : 'Chưa chọn địa điểm';
+}
+
 function formatPlayerSessionOptionLabel(session) {
-  const location = session && session.location ? `${escapeOptionLabel(session.location)} - ` : '';
+  const location = escapeOptionLabel(getSessionLocationLabel(session));
   const playAt = formatWindowDate(session && session.playAt);
-  return `${location}Play Time ${playAt}`;
+  return `${location} | Play ${playAt}`;
 }
 
 function levelLabel(level) {
@@ -347,25 +351,28 @@ function renderWindowBanner() {
     return;
   }
   const playStarted = hasPlayStarted(playerWindowConfig);
+  const locationText = 'Địa điểm: ' + getSessionLocationLabel(playerWindowConfig) + '.\n';
   const playAtHint = (!playStarted && playerWindowConfig.playAt)
     ? '\nStatus sẽ mở sau ' + formatWindowDate(playerWindowConfig.playAt)
     : '';
 
   if (phase === 'before-open') {
     banner.className = 'alert alert-warning';
-    banner.textContent = 'Hiện tại chưa đến giờ đăng ký. Vui lòng quay lại trong khung giờ ' + formatWindowDate(playerWindowConfig.checkinOpenAt) + ' - ' + formatWindowDate(playerWindowConfig.checkinCloseAt);
+    banner.style.whiteSpace = 'pre-line';
+    banner.textContent = locationText + 'Hiện tại chưa đến giờ đăng ký. Vui lòng quay lại trong khung giờ ' + formatWindowDate(playerWindowConfig.checkinOpenAt) + ' - ' + formatWindowDate(playerWindowConfig.checkinCloseAt);
     return;
   }
 
   if (phase === 'checkin-open') {
     banner.className = 'alert alert-success';
     banner.style.whiteSpace = 'pre-line';
-    banner.textContent = 'Cổng check-in đang mở đến ' + formatWindowDate(playerWindowConfig.checkinCloseAt) + '.\nTrong thời gian này bạn có thể đăng ký mới, đăng ký lại bằng phone hoặc hủy đăng ký của khung thời gian đang chọn.' + playAtHint;
+    banner.textContent = locationText + 'Cổng check-in đang mở đến ' + formatWindowDate(playerWindowConfig.checkinCloseAt) + '.\nTrong thời gian này bạn có thể đăng ký mới, đăng ký lại bằng phone hoặc hủy đăng ký của khung thời gian đang chọn.' + playAtHint;
     return;
   }
 
   banner.className = 'alert alert-info';
-  banner.textContent = 'Khung giờ đăng ký mới đã đóng. Bạn chỉ có thể nhập phone để truy suất player đã đăng ký và cập nhật prefer/status.';
+  banner.style.whiteSpace = 'pre-line';
+  banner.textContent = locationText + 'Khung giờ đăng ký mới đã đóng. Bạn chỉ có thể nhập phone để truy suất player đã đăng ký và cập nhật prefer/status.';
 }
 
 function renderPlayerSessionSelector() {
@@ -401,7 +408,7 @@ function renderPlayerSessionSelector() {
   select.disabled = availablePlayerSessions.length === 1;
 
   if (availablePlayerSessions.length === 1) {
-    hint.textContent = 'Hiện tại chỉ có một khung thời gian đang mở.';
+    hint.textContent = 'Hiện tại chỉ có một khung thời gian đang mở: ' + getSessionLocationLabel(availablePlayerSessions[0]) + '.';
     return;
   }
 
