@@ -107,6 +107,7 @@
       id: 'global',
       sessionId: source.id || source.session_id || null,
       activeSessionId: source.active_session_id || source.id || source.session_id || null,
+      location: source.location || null,
       checkinEnabled: !!source.checkin_enabled,
       checkinOpenAt: source.checkin_open_at || null,
       checkinCloseAt: source.checkin_close_at || null,
@@ -161,6 +162,7 @@
       id: 'global',
       session_id: null,
       active_session_id: null,
+      location: null,
       checkin_enabled: false,
       checkin_open_at: null,
       checkin_close_at: null,
@@ -178,6 +180,7 @@
       id: source.id || 'global',
       sessionId: source.session_id || null,
       activeSessionId: source.active_session_id || source.session_id || null,
+      location: source.location || null,
       checkinEnabled: !!source.checkin_enabled,
       checkinOpenAt: source.checkin_open_at || null,
       checkinCloseAt: source.checkin_close_at || null,
@@ -447,6 +450,7 @@
   function toPlayerSessionPayload(config, sessionId) {
     return {
       id: sessionId || config.sessionId,
+      location: config.location || null,
       checkin_enabled: !!config.checkinEnabled,
       checkin_open_at: config.checkinOpenAt || null,
       checkin_close_at: config.checkinCloseAt || null,
@@ -462,6 +466,7 @@
     const supabaseClient = getClient();
     if (!supabaseClient) return mapPlayerSessionRow({
       id: config.sessionId,
+      location: config.location || null,
       checkin_enabled: !!config.checkinEnabled,
       checkin_open_at: config.checkinOpenAt || null,
       checkin_close_at: config.checkinCloseAt || null,
@@ -485,6 +490,7 @@
     const supabaseClient = getClient();
     if (!supabaseClient) return mapPlayerSessionRow({
       id: config.sessionId,
+      location: config.location || null,
       checkin_enabled: !!config.checkinEnabled,
       checkin_open_at: config.checkinOpenAt || null,
       checkin_close_at: config.checkinCloseAt || null,
@@ -495,6 +501,24 @@
       updated_at: config.updatedAt || isoNow()
     });
     const payload = toPlayerSessionPayload(config, config.sessionId);
+    const expectedUpdatedAt = config.expectedUpdatedAt || null;
+    if (expectedUpdatedAt) {
+      const { data, error } = await supabaseClient
+        .from(PLAYER_SESSIONS_TABLE)
+        .update(payload)
+        .eq('id', config.sessionId)
+        .eq('updated_at', expectedUpdatedAt)
+        .select('*')
+        .maybeSingle();
+      if (error) throw error;
+      if (!data) {
+        const conflictError = new Error('Player session was updated by another admin. Reloading latest session state.');
+        conflictError.code = 'STALE_PLAYER_SESSION';
+        throw conflictError;
+      }
+      return mapPlayerSessionRow(data);
+    }
+
     const { data, error } = await supabaseClient
       .from(PLAYER_SESSIONS_TABLE)
       .upsert(payload, { onConflict: 'id' })

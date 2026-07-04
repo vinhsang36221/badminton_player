@@ -16,6 +16,7 @@ function createEmptyPlayerWindowConfig(overrides = {}) {
   return {
     sessionId: null,
     activeSessionId: null,
+    location: null,
     checkinEnabled: false,
     checkinOpenAt: null,
     checkinCloseAt: null,
@@ -117,9 +118,19 @@ function formatWindowDate(value) {
   });
 }
 
+function escapeOptionLabel(value) {
+  return String(value || '').replace(/[&<>"]/g, character => ({
+    '&': '&amp;',
+    '<': '&lt;',
+    '>': '&gt;',
+    '"': '&quot;'
+  }[character]));
+}
+
 function formatPlayerSessionOptionLabel(session) {
+  const location = session && session.location ? `${escapeOptionLabel(session.location)} - ` : '';
   const playAt = formatWindowDate(session && session.playAt);
-  return `Play Time ${playAt}`;
+  return `${location}Play Time ${playAt}`;
 }
 
 function levelLabel(level) {
@@ -704,7 +715,6 @@ function buildRegisteredPlayer() {
     ready: canEditStatus ? document.getElementById('registerReady').value === 'ready' : false,
     rating: (Number.isFinite(level) ? level : 4) * 100,
     matches: 0,
-    idleIndex: 0,
     couple: null,
     unpair: null,
     unpairMain: false,
