@@ -132,9 +132,12 @@ function getSessionLocationLabel(session) {
 }
 
 function formatPlayerSessionOptionLabel(session) {
-  const location = escapeOptionLabel(getSessionLocationLabel(session));
-  const playAt = formatWindowDate(session && session.playAt);
-  return `${location} | Play ${playAt}`;
+  if (!session || !session.sessionId) return 'Session không hợp lệ';
+  const locationText = session.location ? `${escapeOptionLabel(session.location)} | ` : '';
+  const openText = formatWindowDate(session.checkinOpenAt);
+  const closeText = formatWindowDate(session.checkinCloseAt);
+  const playAtText = formatWindowDate(session.playAt);
+  return `${locationText}${openText} -> ${closeText} | Play ${playAtText}`;
 }
 
 function levelLabel(level) {
@@ -335,7 +338,7 @@ function renderWindowBanner() {
   const phase = getPlayerAccessPhase(playerWindowConfig);
   if (phase === 'select-session') {
     banner.className = 'alert alert-warning';
-    banner.textContent = 'Hiện có nhiều khung thời gian đang mở. Hãy chọn đúng khung thời gian đăng ký trước khi tiếp tục.';
+    banner.textContent = 'Hãy chọn đúng khung thời gian đăng ký trước khi tiếp tục.';
     return;
   }
   if (!availablePlayerSessions.length) {
@@ -392,23 +395,18 @@ function renderPlayerSessionSelector() {
     return;
   }
 
-  const hasMultipleSessions = availablePlayerSessions.length > 1;
-  const options = [];
-  if (hasMultipleSessions) {
-    options.push('<option value="">Chọn khung thời gian đăng ký</option>');
-  }
+  const options = ['<option value="">Chọn khung thời gian đăng ký</option>'];
   for (const session of availablePlayerSessions) {
     const isSelected = selectedSessionId && session.sessionId === selectedSessionId;
     options.push(`<option value="${session.sessionId}"${isSelected ? ' selected' : ''}>${formatPlayerSessionOptionLabel(session)}</option>`);
   }
   select.innerHTML = options.join('');
-  if (!selectedSessionId && !hasMultipleSessions && availablePlayerSessions[0]) {
-    select.value = availablePlayerSessions[0].sessionId;
-  }
-  select.disabled = availablePlayerSessions.length === 1;
+  select.disabled = false;
 
   if (availablePlayerSessions.length === 1) {
-    hint.textContent = 'Hiện tại chỉ có một khung thời gian đang mở: ' + getSessionLocationLabel(availablePlayerSessions[0]) + '.';
+    hint.textContent = selectedSessionId
+      ? 'Thông tin tra cứu, đăng ký và cập nhật sẽ áp dụng cho khung thời gian đang chọn.'
+      : 'Hiện tại có một khung thời gian đang mở. Hãy chọn session để tiếp tục.';
     return;
   }
 
