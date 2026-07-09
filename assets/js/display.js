@@ -226,9 +226,6 @@ async function displayLoadAll() {
   const sessionId = displaySelectedSessionId || null;
   displayConfig = await window.BadmintonBackend.fetchAppConfig(sessionId);
   displayPlayers = await window.BadmintonBackend.fetchDisplayPlayers(sessionId);
-  if (!displaySelectedSessionId && displayConfig.sessionId) {
-    displaySelectedSessionId = displayConfig.sessionId;
-  }
   displayRenderSessionSelector();
   displayRender();
 }
@@ -286,6 +283,7 @@ const displaySessionSelect = document.getElementById('displaySessionSelect');
 if (displaySessionSelect) {
   displaySessionSelect.addEventListener('change', event => {
     displaySelectedSessionId = event && event.target ? event.target.value || null : null;
+    displayRenderSessionSelector();
     void displayRefreshFromRemote();
   });
 }
