@@ -293,9 +293,19 @@
     return fetchTablePlayers(SESSION_PLAYERS_TABLE, { sessionId });
   }
 
-  async function fetchDisplayPlayers() {
+  async function fetchDisplayPlayers(sessionId) {
     const supabaseClient = getClient();
     if (!supabaseClient) return [];
+    if (sessionId) {
+      const { data, error } = await supabaseClient.rpc('display_players_public_by_session', {
+        p_session_id: sessionId
+      });
+      if (error) {
+        if (hasServiceRoleKey) return fetchTablePlayers(SESSION_PLAYERS_TABLE, { sessionId });
+        throw error;
+      }
+      return (data || []).map(mapRemotePlayer).filter(Boolean);
+    }
     const { data, error } = await supabaseClient
       .from(DISPLAY_PLAYERS_VIEW)
       .select('*')

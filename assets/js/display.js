@@ -3,14 +3,76 @@ const DISPLAY_DEFAULT_COURT_COUNT = 4;
 
 let displayPlayers = [];
 let displayConfig = {
+  sessionId: null,
+  location: null,
   courtEnabledStates: [],
   layoutState: null,
   updatedAt: null
 };
+let displayAvailableSessions = [];
+let displaySelectedSessionId = null;
 let displayPlayersUnsubscribe = null;
 let displayConfigUnsubscribe = null;
 let displayRefreshTimer = null;
 const DISPLAY_REFRESH_INTERVAL_MS = 3000;
+
+function displayEscapeOptionLabel(value) {
+  return String(value || '').replace(/[&<>"]/g, character => ({
+    '&': '&amp;',
+    '<': '&lt;',
+    '>': '&gt;',
+    '"': '&quot;'
+  }[character]));
+}
+
+function displayFormatDate(value) {
+  if (!value) return '--';
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) return '--';
+  return parsed.toLocaleString('vi-VN', {
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false
+  });
+}
+
+function displayFormatSessionOptionLabel(session) {
+  if (!session || !session.sessionId) return 'Session không hợp lệ';
+  const locationText = session.location ? `${displayEscapeOptionLabel(session.location)} | ` : '';
+  return `${locationText}${displayFormatDate(session.checkinOpenAt)} -> ${displayFormatDate(session.checkinCloseAt)} | Play ${displayFormatDate(session.playAt)}`;
+}
+
+function displayRenderSessionSelector() {
+  const card = document.getElementById('displaySessionCard');
+  const select = document.getElementById('displaySessionSelect');
+  const hint = document.getElementById('displaySessionHint');
+  if (!card || !select || !hint) return;
+
+  const hasSessions = displayAvailableSessions.length > 0;
+  card.classList.toggle('d-none', !hasSessions);
+  if (!hasSessions) {
+    select.innerHTML = '<option value="">Hiện chưa có khung thời gian mở</option>';
+    select.disabled = true;
+    hint.textContent = 'Admin cần bật ít nhất một khung thời gian để display chọn session.';
+    return;
+  }
+
+  const currentSessionId = displaySelectedSessionId || displayConfig.sessionId || null;
+  const options = ['<option value="">Session hiển thị hiện tại</option>'];
+  displayAvailableSessions.forEach(session => {
+    const selected = currentSessionId && session.sessionId === currentSessionId ? ' selected' : '';
+    options.push(`<option value="${session.sessionId}"${selected}>${displayFormatSessionOptionLabel(session)}</option>`);
+  });
+  select.innerHTML = options.join('');
+  select.value = currentSessionId || '';
+  select.disabled = false;
+  hint.textContent = currentSessionId
+    ? 'Display đang xem dữ liệu sân của session đang chọn.'
+    : 'Đang xem session hiển thị hiện tại từ admin.';
+}
 
 function displayGetCourtCount() {
   if (Array.isArray(displayConfig.courtEnabledStates) && displayConfig.courtEnabledStates.length) {
@@ -89,7 +151,8 @@ function displayStatusText() {
   if (!displayConfig.updatedAt) return 'Chưa có dữ liệu build sân.';
   const parsed = new Date(displayConfig.updatedAt);
   if (Number.isNaN(parsed.getTime())) return 'Đã tải dữ liệu sân.';
-  return `Cập nhật lúc ${parsed.toLocaleString('vi-VN')} | ${displayGetCourtCount()} sân | ${displayCourtLabel(displayGetCourtCount() - 1)} -> ${displayCourtLabel(0)}`;
+  const sessionText = displayConfig.location ? ` | ${displayConfig.location}` : '';
+  return `Cập nhật lúc ${parsed.toLocaleString('vi-VN')} | ${displayGetCourtCount()} sân | ${displayCourtLabel(displayGetCourtCount() - 1)} -> ${displayCourtLabel(0)}${sessionText}`;
 }
 
 function displayRenderCourt(index, matchSnapshot, playerMap) {
@@ -160,8 +223,13 @@ function displayRender() {
 }
 
 async function displayLoadAll() {
-  displayPlayers = await window.BadmintonBackend.fetchDisplayPlayers();
-  displayConfig = await window.BadmintonBackend.fetchAppConfig();
+  const sessionId = displaySelectedSessionId || null;
+  displayConfig = await window.BadmintonBackend.fetchAppConfig(sessionId);
+  displayPlayers = await window.BadmintonBackend.fetchDisplayPlayers(sessionId);
+  if (!displaySelectedSessionId && displayConfig.sessionId) {
+    displaySelectedSessionId = displayConfig.sessionId;
+  }
+  displayRenderSessionSelector();
   displayRender();
 }
 
@@ -172,6 +240,17 @@ async function displayRefreshFromRemote() {
   } catch (error) {
     console.error('display refresh failed', error);
   }
+}
+
+async function displayRefreshSessions() {
+  displayAvailableSessions = await window.BadmintonBackend.fetchSelectablePlayerSessions();
+  const selectedStillAvailable = displaySelectedSessionId
+    ? displayAvailableSessions.some(session => session.sessionId === displaySelectedSessionId)
+    : false;
+  if (displaySelectedSessionId && !selectedStillAvailable) {
+    displaySelectedSessionId = null;
+  }
+  displayRenderSessionSelector();
 }
 
 function startDisplayRefreshLoop() {
@@ -191,14 +270,24 @@ async function displayStart() {
     return;
   }
 
+  await displayRefreshSessions();
   await displayLoadAll();
 
   if (displayConfigUnsubscribe) displayConfigUnsubscribe();
   displayConfigUnsubscribe = window.BadmintonBackend.subscribeToAppConfig(async () => {
+    await displayRefreshSessions();
     await displayRefreshFromRemote();
   });
 
   startDisplayRefreshLoop();
+}
+
+const displaySessionSelect = document.getElementById('displaySessionSelect');
+if (displaySessionSelect) {
+  displaySessionSelect.addEventListener('change', event => {
+    displaySelectedSessionId = event && event.target ? event.target.value || null : null;
+    void displayRefreshFromRemote();
+  });
 }
 
 displayStart();
