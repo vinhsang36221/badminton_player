@@ -13,6 +13,7 @@
   const PUBLIC_PLAYER_SESSIONS_VIEW = 'public_player_sessions';
   const PLAYER_ACCESS_FUNCTION = 'player-access';
   let client = null;
+  const adminPresenceChannels = new Map();
 
   function getClient() {
     if (!isConfigured) return null;
@@ -651,6 +652,47 @@
     };
   }
 
+  function subscribeToAdminPresence(sessionId, hostInfo, callback, options = {}) {
+    const supabaseClient = getClient();
+    const normalizedSessionId = String(sessionId || 'no-session');
+    if (!supabaseClient || !sessionId) return function () {};
+
+    const channel = supabaseClient.channel(`badminton-admin-presence-${normalizedSessionId}`, {
+      config: { presence: { key: hostInfo?.clientId || Math.random().toString(36).slice(2, 10) } }
+    });
+    adminPresenceChannels.set(normalizedSessionId, channel);
+    const emitState = () => {
+      const state = channel.presenceState();
+      const hosts = Object.values(state || {}).flat().map(entry => ({
+        clientId: entry.clientId || null,
+        name: entry.name || 'Unknown host',
+        sessionId: entry.sessionId || normalizedSessionId,
+        onlineAt: entry.onlineAt || null
+      }));
+      callback(hosts);
+    };
+
+    channel
+      .on('presence', { event: 'sync' }, emitState)
+      .on('presence', { event: 'join' }, emitState)
+      .on('presence', { event: 'leave' }, emitState)
+      .subscribe(status => {
+        if (status !== 'SUBSCRIBED') return;
+        channel.track({
+          clientId: hostInfo?.clientId || null,
+          name: hostInfo?.name || 'Unknown host',
+          sessionId: normalizedSessionId,
+          onlineAt: isoNow()
+        });
+      });
+
+    return function () {
+      try { channel.untrack(); } catch (error) {}
+      if (adminPresenceChannels.get(normalizedSessionId) === channel) adminPresenceChannels.delete(normalizedSessionId);
+      supabaseClient.removeChannel(channel);
+    };
+  }
+
   function getMissingConfigMessage() {
     if (!hasSupabaseLibrary) return 'Missing Supabase JS library.';
     if (!globalConfig.url || !projectKey) return 'Fill url plus anonKey or serviceRoleKey in config.';
@@ -684,6 +726,7 @@
     fetchAppConfig: fetchAppConfig,
     subscribeToPlayers: subscribeToPlayers,
     subscribeToAppConfig: subscribeToAppConfig,
+    subscribeToAdminPresence: subscribeToAdminPresence,
     lookupPlayerAccess: lookupPlayerAccess,
     checkDuplicatePlayerName: checkDuplicatePlayerName,
     registerPlayerAccess: registerPlayerAccess,
