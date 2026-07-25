@@ -716,6 +716,35 @@
     return fallbackMessage || 'Unknown error';
   }
 
+  async function parseFunctionInvokeError(error) {
+    const defaultMessage = toErrorMessage(error, 'Cannot reach secure player endpoint.');
+    const context = error && typeof error === 'object' ? error.context : null;
+    if (!context || typeof context.clone !== 'function') return defaultMessage;
+    const statusCode = Number.isFinite(Number(context.status)) ? Number(context.status) : null;
+
+    try {
+      const response = context.clone();
+      const payload = await response.json().catch(() => null);
+      if (payload && typeof payload === 'object') {
+        const nestedMessage = toErrorMessage(payload, '');
+        if (nestedMessage) return nestedMessage;
+      }
+
+      const text = await response.text().catch(() => '');
+      if (typeof text === 'string' && text.trim()) return text.trim();
+    } catch (parseError) {
+    }
+
+    if (statusCode === 404) {
+      return `Secure player endpoint not found (404). Please deploy Supabase function "${PLAYER_ACCESS_FUNCTION}".`;
+    }
+    if (statusCode === 401 || statusCode === 403) {
+      return 'Secure player endpoint rejected access. Check Supabase key/project config.';
+    }
+
+    return defaultMessage;
+  }
+
   async function invokePlayerAccess(action, payload) {
     const supabaseClient = getClient();
     if (!supabaseClient) throw new Error('Supabase client is not configured.');
@@ -725,7 +754,7 @@
         ...(payload || {})
       }
     });
-    if (error) throw new Error(toErrorMessage(error, 'Cannot reach secure player endpoint.'));
+    if (error) throw new Error(await parseFunctionInvokeError(error));
     if (data && data.error) throw new Error(toErrorMessage(data, 'Secure player endpoint failed.'));
     return data || {};
   }
