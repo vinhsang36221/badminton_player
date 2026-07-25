@@ -776,7 +776,26 @@
         : { p_phone: normalizedPhone };
       const { data, error } = await supabaseClient.rpc(rpcName, rpcPayload);
       if (error) throw error;
-      return normalizeLookupAccessResponse(data);
+      const rpcResponse = normalizeLookupAccessResponse(data);
+
+      if (rpcResponse && rpcResponse.sessionPlayer && !rpcResponse.accessToken) {
+        try {
+          const functionResponse = normalizeLookupAccessResponse(
+            await invokePlayerAccess('lookup', { phone: normalizedPhone, sessionId })
+          );
+          if (functionResponse && functionResponse.accessToken) {
+            return {
+              ...rpcResponse,
+              ...functionResponse,
+              profile: functionResponse.profile || rpcResponse.profile,
+              sessionPlayer: functionResponse.sessionPlayer || rpcResponse.sessionPlayer
+            };
+          }
+        } catch (enrichError) {
+        }
+      }
+
+      return rpcResponse;
     } catch (error) {
       return invokePlayerAccess('lookup', { phone: normalizedPhone, sessionId });
     }
