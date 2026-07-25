@@ -906,7 +906,8 @@ async function handleManageSubmit(event) {
     setFeedback('Hiện chưa đến thời gian cho phép truy suất player đã đăng ký.', 'warning');
     return;
   }
-  const wasRegisteredInCurrentSession = !!activeSessionPlayer;
+  const selectedSessionId = getSelectedPlayerSessionId();
+  const wasRegisteredInCurrentSession = !!(activeSessionPlayer && activeSessionPlayer.id);
   const nextPlayer = {
     ...(activePlayerProfile || activePlayer),
     ...(activeSessionPlayer || {}),
@@ -928,11 +929,13 @@ async function handleManageSubmit(event) {
     updatedAt: new Date().toISOString()
   };
   try {
-    const response = await window.BadmintonBackend.savePlayerAccess(
-      nextPlayer,
-      getSelectedPlayerSessionId(),
-      activeSessionPlayer && activeSessionPlayer.id ? activeSessionPlayer.id : null
-    );
+    const response = wasRegisteredInCurrentSession
+      ? await window.BadmintonBackend.savePlayerAccess(
+        nextPlayer,
+        selectedSessionId,
+        activeSessionPlayer.id
+      )
+      : await window.BadmintonBackend.registerPlayerAccess(nextPlayer, selectedSessionId);
     const savedProfile = response && response.profile ? response.profile : null;
     const savedSession = response && response.sessionPlayer ? response.sessionPlayer : null;
     setActivePlayerRecords(savedProfile, savedSession);
@@ -940,12 +943,12 @@ async function handleManageSubmit(event) {
     const successMessage = appendDuplicateNameNotice(
       wasRegisteredInCurrentSession
         ? (hasPlayStarted(playerWindowConfig) ? 'Đã cập nhật prefer và status thành công.' : 'Đã cập nhật prefer thành công.')
-        : 'Đăng ký lại thành công vào danh sách player của khung thời gian đang chọn.',
+        : 'Đăng ký thành công.',
       response
     );
     setFeedback(successMessage, 'success');
     showSuccessPopupWithTitle(
-      wasRegisteredInCurrentSession ? 'Cập nhật thành công' : 'Đăng ký lại thành công',
+      wasRegisteredInCurrentSession ? 'Cập nhật thành công' : 'Đăng ký thành công',
       successMessage
     );
   } catch (error) {
