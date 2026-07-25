@@ -140,7 +140,10 @@
       phase: source.phase || null,
       playStarted: source.playStarted === true || source.play_started === true,
       profile: mapRemotePlayer(source.profile || null),
-      sessionPlayer: mapRemotePlayer(source.sessionPlayer || source.session_player || null)
+      sessionPlayer: mapRemotePlayer(source.sessionPlayer || source.session_player || null),
+      accessToken: typeof source.accessToken === 'string'
+        ? source.accessToken
+        : (typeof source.access_token === 'string' ? source.access_token : null)
     };
   }
 

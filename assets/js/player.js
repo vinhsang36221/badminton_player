@@ -792,8 +792,13 @@ async function lookupPlayerByPhone(phone) {
   const response = await window.BadmintonBackend.lookupPlayerAccess(phone, selectedSessionId);
   const profile = response && response.profile ? response.profile : null;
   const sessionPlayer = response && response.sessionPlayer ? response.sessionPlayer : null;
+  const accessToken = response && typeof response.accessToken === 'string' ? response.accessToken : null;
 
   if (sessionPlayer) {
+    if (accessToken) {
+      rememberMemberAccessToken(selectedSessionId, sessionPlayer, accessToken);
+      activeMemberAccessToken = accessToken;
+    }
     setActivePlayerRecords(profile || sessionPlayer, sessionPlayer);
     showManageCard(activePlayer);
     if (activeMemberAccessToken) {
