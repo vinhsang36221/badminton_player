@@ -140,10 +140,7 @@
       phase: source.phase || null,
       playStarted: source.playStarted === true || source.play_started === true,
       profile: mapRemotePlayer(source.profile || null),
-      sessionPlayer: mapRemotePlayer(source.sessionPlayer || source.session_player || null),
-      accessToken: typeof source.accessToken === 'string'
-        ? source.accessToken
-        : (typeof source.access_token === 'string' ? source.access_token : null)
+      sessionPlayer: mapRemotePlayer(source.sessionPlayer || source.session_player || null)
     };
   }
 
@@ -757,7 +754,19 @@
         ...(payload || {})
       }
     });
-    if (error) throw new Error(await parseFunctionInvokeError(error));
+    if (error) {
+      const status = Number.isFinite(Number(error && error.context && error.context.status))
+        ? Number(error.context.status)
+        : null;
+      const message = await parseFunctionInvokeError(error);
+      console.warn('player-access invoke failed', {
+        action,
+        status,
+        sessionId: payload && payload.sessionId ? String(payload.sessionId) : null,
+        message
+      });
+      throw new Error(message);
+    }
     if (data && data.error) throw new Error(toErrorMessage(data, 'Secure player endpoint failed.'));
     return data || {};
   }
@@ -776,26 +785,7 @@
         : { p_phone: normalizedPhone };
       const { data, error } = await supabaseClient.rpc(rpcName, rpcPayload);
       if (error) throw error;
-      const rpcResponse = normalizeLookupAccessResponse(data);
-
-      if (rpcResponse && rpcResponse.sessionPlayer && !rpcResponse.accessToken) {
-        try {
-          const functionResponse = normalizeLookupAccessResponse(
-            await invokePlayerAccess('lookup', { phone: normalizedPhone, sessionId })
-          );
-          if (functionResponse && functionResponse.accessToken) {
-            return {
-              ...rpcResponse,
-              ...functionResponse,
-              profile: functionResponse.profile || rpcResponse.profile,
-              sessionPlayer: functionResponse.sessionPlayer || rpcResponse.sessionPlayer
-            };
-          }
-        } catch (enrichError) {
-        }
-      }
-
-      return rpcResponse;
+      return normalizeLookupAccessResponse(data);
     } catch (error) {
       return invokePlayerAccess('lookup', { phone: normalizedPhone, sessionId });
     }
@@ -809,8 +799,8 @@
     return invokePlayerAccess('register', { player, sessionId });
   }
 
-  async function savePlayerAccess(player, sessionId, accessToken = null) {
-    return invokePlayerAccess('save', { player, sessionId, accessToken });
+  async function savePlayerAccess(player, sessionId, sessionPlayerId = null) {
+    return invokePlayerAccess('save', { player, sessionId, sessionPlayerId });
   }
 
   async function cancelPlayerAccess(payload) {

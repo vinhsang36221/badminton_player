@@ -20,8 +20,6 @@ const sessionCapabilities = {
   canEnterResult: false
 };
 
-const MEMBER_ACCESS_TOKEN_STORAGE_KEY = 'badminton_member_access_tokens_v1';
-
 function requireSessionReadPermission(action = 'read') {
   if (!sessionCapabilities.canReadSession) throw new Error(`Session read permission required for ${action}.`);
   return true;
@@ -51,7 +49,6 @@ let availablePlayerSessions = [];
 let activePlayer = null;
 let activePlayerProfile = null;
 let activeSessionPlayer = null;
-let activeMemberAccessToken = null;
 let appReady = false;
 let playerSettingsSubscription = null;
 let duplicateNameCheckTimer = null;
@@ -60,50 +57,6 @@ let hasDuplicateRegisterName = false;
 const PLAYER_NAME_MAX_LENGTH = 13;
 const lastAppliedSessionVersionById = new Map();
 const lastAppliedSessionSignatureById = new Map();
-
-function loadMemberAccessTokenMap() {
-  try {
-    const raw = localStorage.getItem(MEMBER_ACCESS_TOKEN_STORAGE_KEY);
-    if (!raw) return {};
-    const parsed = JSON.parse(raw);
-    return parsed && typeof parsed === 'object' ? parsed : {};
-  } catch (error) {
-    return {};
-  }
-}
-
-function saveMemberAccessTokenMap(tokenMap) {
-  try {
-    localStorage.setItem(MEMBER_ACCESS_TOKEN_STORAGE_KEY, JSON.stringify(tokenMap || {}));
-  } catch (error) {
-  }
-}
-
-function buildMemberAccessTokenKey(sessionId, playerId, phone) {
-  return `${sessionId || 'no-session'}|${playerId || ''}|${normalizePhoneInputValue(phone || '')}`;
-}
-
-function rememberMemberAccessToken(sessionId, player, accessToken) {
-  if (!accessToken || !player || !player.id) return;
-  const tokenMap = loadMemberAccessTokenMap();
-  tokenMap[buildMemberAccessTokenKey(sessionId, player.id, player.phone)] = accessToken;
-  saveMemberAccessTokenMap(tokenMap);
-}
-
-function forgetMemberAccessToken(sessionId, player) {
-  if (!player || !player.id) return;
-  const tokenMap = loadMemberAccessTokenMap();
-  const tokenKey = buildMemberAccessTokenKey(sessionId, player.id, player.phone);
-  if (!Object.prototype.hasOwnProperty.call(tokenMap, tokenKey)) return;
-  delete tokenMap[tokenKey];
-  saveMemberAccessTokenMap(tokenMap);
-}
-
-function getMemberAccessToken(sessionId, player) {
-  if (!player || !player.id) return null;
-  const tokenMap = loadMemberAccessTokenMap();
-  return tokenMap[buildMemberAccessTokenKey(sessionId, player.id, player.phone)] || null;
-}
 
 function playerNow() {
   return new Date();
@@ -644,7 +597,6 @@ function resetActivePlayerState() {
   activePlayer = null;
   activePlayerProfile = null;
   activeSessionPlayer = null;
-  activeMemberAccessToken = null;
   updateManageSubmitButton();
 }
 
@@ -681,7 +633,6 @@ function setActivePlayerRecords(profile, sessionPlayer) {
   activePlayerProfile = profile || null;
   activeSessionPlayer = sessionPlayer || null;
   activePlayer = mergePlayerRecords(profile, sessionPlayer);
-  activeMemberAccessToken = getMemberAccessToken(getSelectedPlayerSessionId(), activeSessionPlayer || activePlayer);
 }
 
 function updateManageSubmitButton() {
@@ -695,6 +646,8 @@ function updateManageSubmitButton() {
       ? (canCancelRegisteredPlayers(playerWindowConfig) ? 'Xóa player khỏi danh sách của khung thời gian đang chọn.' : 'Chỉ có thể hủy đăng ký trong thời gian mở check-in.')
       : 'Player này chưa có trong danh sách của khung thời gian đang chọn.';
   }
+
+  updatePlayerAccessControls();
 }
 
 async function loadWindowConfig(sessionId) {
@@ -792,20 +745,11 @@ async function lookupPlayerByPhone(phone) {
   const response = await window.BadmintonBackend.lookupPlayerAccess(phone, selectedSessionId);
   const profile = response && response.profile ? response.profile : null;
   const sessionPlayer = response && response.sessionPlayer ? response.sessionPlayer : null;
-  const accessToken = response && typeof response.accessToken === 'string' ? response.accessToken : null;
 
   if (sessionPlayer) {
-    if (accessToken) {
-      rememberMemberAccessToken(selectedSessionId, sessionPlayer, accessToken);
-      activeMemberAccessToken = accessToken;
-    }
     setActivePlayerRecords(profile || sessionPlayer, sessionPlayer);
     showManageCard(activePlayer);
-    if (activeMemberAccessToken) {
-      setFeedback('Đã tải thông tin player trong khung thời gian đang chọn. Bạn có thể cập nhật thông tin hoặc hủy đăng ký.', 'success');
-    } else {
-      setFeedback('Đã tải thông tin player, nhưng thiết bị này chưa có access token để cập nhật/hủy. Hãy đăng ký lại bằng thiết bị đã dùng trước đó hoặc nhờ admin hỗ trợ.', 'warning');
-    }
+    setFeedback('Đã tải thông tin player trong khung thời gian đang chọn. Bạn có thể cập nhật thông tin hoặc hủy đăng ký.', 'success');
     return;
   }
 
@@ -936,11 +880,6 @@ async function handleRegisterSubmit(event) {
     const response = await window.BadmintonBackend.registerPlayerAccess(player, getSelectedPlayerSessionId());
     const savedProfile = response && response.profile ? response.profile : null;
     const savedSession = response && response.sessionPlayer ? response.sessionPlayer : null;
-    const accessToken = response && typeof response.accessToken === 'string' ? response.accessToken : null;
-    if (accessToken && savedSession) {
-      rememberMemberAccessToken(getSelectedPlayerSessionId(), savedSession, accessToken);
-      activeMemberAccessToken = accessToken;
-    }
     const successMessage = appendDuplicateNameNotice(
       'Hãy chuyển status => Ready khi đến sân nhé.\nHẹn gặp lại bạn.',
       response
@@ -968,10 +907,6 @@ async function handleManageSubmit(event) {
     return;
   }
   const wasRegisteredInCurrentSession = !!activeSessionPlayer;
-  if (wasRegisteredInCurrentSession && !activeMemberAccessToken) {
-    setFeedback('Thiếu access token cho player này trên thiết bị hiện tại. Không thể cập nhật.', 'warning');
-    return;
-  }
   const nextPlayer = {
     ...(activePlayerProfile || activePlayer),
     ...(activeSessionPlayer || {}),
@@ -993,14 +928,13 @@ async function handleManageSubmit(event) {
     updatedAt: new Date().toISOString()
   };
   try {
-    const response = await window.BadmintonBackend.savePlayerAccess(nextPlayer, getSelectedPlayerSessionId(), activeMemberAccessToken);
+    const response = await window.BadmintonBackend.savePlayerAccess(
+      nextPlayer,
+      getSelectedPlayerSessionId(),
+      activeSessionPlayer && activeSessionPlayer.id ? activeSessionPlayer.id : null
+    );
     const savedProfile = response && response.profile ? response.profile : null;
     const savedSession = response && response.sessionPlayer ? response.sessionPlayer : null;
-    const accessToken = response && typeof response.accessToken === 'string' ? response.accessToken : null;
-    if (accessToken && savedSession) {
-      rememberMemberAccessToken(getSelectedPlayerSessionId(), savedSession, accessToken);
-      activeMemberAccessToken = accessToken;
-    }
     setActivePlayerRecords(savedProfile, savedSession);
     showManageCard(activePlayer);
     const successMessage = appendDuplicateNameNotice(
@@ -1035,21 +969,13 @@ async function handleCancelRegistration() {
     return;
   }
 
-  if (!activeMemberAccessToken) {
-    setFeedback('Thiếu access token cho player này trên thiết bị hiện tại. Không thể hủy đăng ký.', 'warning');
-    return;
-  }
-
   const phone = activePlayer && activePlayer.phone ? activePlayer.phone : '';
   try {
     await window.BadmintonBackend.cancelPlayerAccess({
       phone,
       sessionId: getSelectedPlayerSessionId(),
-      sessionPlayerId: activeSessionPlayer.id,
-      accessToken: activeMemberAccessToken
+      sessionPlayerId: activeSessionPlayer.id
     });
-    forgetMemberAccessToken(getSelectedPlayerSessionId(), activeSessionPlayer);
-    activeMemberAccessToken = null;
     if (phone) {
       await lookupPlayerByPhone(phone);
     } else {
