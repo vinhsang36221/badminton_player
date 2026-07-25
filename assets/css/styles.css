@@ -1,5 +1,10 @@
 body { font-size: 14px; }
 
+html.admin-page,
+body.admin-page {
+	overscroll-behavior-y: none;
+}
+
 body.bg-light,
 body.display-page-bg,
 body.player-page-bg {
@@ -7,11 +12,20 @@ body.player-page-bg {
 	isolation: isolate;
 }
 
-body.bg-light > :not(script),
-body.display-page-bg > :not(script),
-body.player-page-bg > :not(script) {
+body.bg-light > :not(script):not(.modal):not(.modal-backdrop):not(.flatpickr-calendar),
+body.display-page-bg > :not(script):not(.modal):not(.modal-backdrop):not(.flatpickr-calendar),
+body.player-page-bg > :not(script):not(.modal):not(.modal-backdrop):not(.flatpickr-calendar) {
 	position: relative;
 	z-index: 1;
+}
+
+body.bg-light > .modal,
+body.bg-light > .modal-backdrop,
+body.display-page-bg > .modal,
+body.display-page-bg > .modal-backdrop,
+body.player-page-bg > .modal,
+body.player-page-bg > .modal-backdrop {
+	position: fixed;
 }
 
 body.bg-light::before,
@@ -246,7 +260,6 @@ body.bg-light #courtsRow .court-card .team-player-stack .player-drop-slot {
 	padding-left: 0.25rem !important;
 	padding-right: 0.25rem !important;
 }
-.btn-rating-reset { background-color: #495057 !important; color: #fff !important; }
 .btn-enter-score { background-color: #28a745 !important; color: #fff !important; }
 .court-switch {
 	appearance: none;
@@ -315,7 +328,6 @@ body.bg-light #courtsRow .court-card .team-player-stack .player-drop-slot {
 .admin-right .gender-btn{ width:96px !important; }
 .admin-right .btn-level{ width:48px !important; }
 .admin-right .admin-level-input{ width:56px !important; min-width:56px !important; }
-.admin-right .btn-rating-reset{ width:48px !important; }
 .admin-right .btn-ready, .admin-right .btn-notready{ width:48px !important; }
 .admin-right .prefer-btn{ width:96px !important; }
 .admin-right .admin-partner-select{ width:100px !important; min-width:100px !important; }
@@ -654,7 +666,7 @@ body.bg-light #courtsRow .court-card .team-player-stack .player-drop-slot {
 	.prefer-btn{ width:auto !important; min-width:72px; }
 	.gender-btn{ width:auto !important; min-width:72px; }
 	/* ensure admin panels stack and scroll nicely */
-	#adminPlayerList{ max-height:320px; overflow:auto; }
+	#adminPlayerList{ max-height:min(100vh, 900px); overflow:auto; }
 	#adminHistoryBox, #logPreview{ max-height:200px; overflow:auto; }
 }
 

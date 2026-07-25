@@ -1,6 +1,19 @@
 const DISPLAY_DEFAULT_COURT_START_NUMBER = 9;
 const DISPLAY_DEFAULT_COURT_COUNT = 4;
 
+const sessionCapabilities = {
+  canReadSession: true,
+  canWriteSession: false,
+  canEditLayout: false,
+  canEditPlayers: false,
+  canEnterResult: false
+};
+
+function requireSessionReadPermission(action = 'read') {
+  if (!sessionCapabilities.canReadSession) throw new Error(`Session read permission required for ${action}.`);
+  return true;
+}
+
 let displayPlayers = [];
 let displayConfig = {
   sessionId: null,
@@ -17,11 +30,12 @@ let displayRefreshTimer = null;
 const DISPLAY_REFRESH_INTERVAL_MS = 3000;
 
 function displayEscapeOptionLabel(value) {
-  return String(value || '').replace(/[&<>"]/g, character => ({
+  return String(value || '').replace(/[&<>"']/g, character => ({
     '&': '&amp;',
     '<': '&lt;',
     '>': '&gt;',
-    '"': '&quot;'
+    '"': '&quot;',
+    "'": '&#39;'
   }[character]));
 }
 
@@ -113,7 +127,7 @@ function displayCourtLabel(index) {
 }
 
 function displayPlayerName(player) {
-  return player ? player.name || '' : '';
+  return player ? displayEscapeOptionLabel(player.name || '') : '';
 }
 
 function displayPlayerClass(player) {
@@ -258,6 +272,7 @@ function startDisplayRefreshLoop() {
 }
 
 async function displayStart() {
+  requireSessionReadPermission('displayStart');
   const warning = document.getElementById('displayConfigWarning');
   if (!window.BadmintonBackend || !window.BadmintonBackend.isConfigured) {
     if (warning) {

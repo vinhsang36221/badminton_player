@@ -1,14 +1,14 @@
 (function () {
   const globalConfig = window.BADMINTON_SUPABASE_CONFIG || {};
   const hasSupabaseLibrary = typeof window.supabase !== 'undefined' && typeof window.supabase.createClient === 'function';
-  const hasServiceRoleKey = !!globalConfig.serviceRoleKey;
-  const projectKey = globalConfig.serviceRoleKey || globalConfig.anonKey || '';
+  const projectKey = globalConfig.anonKey || '';
   const isConfigured = !!(globalConfig.url && projectKey && hasSupabaseLibrary);
   const PLAYER_SESSIONS_TABLE = 'player_sessions';
   const SESSION_PLAYERS_TABLE = 'players';
   const PLAYER_PROFILES_TABLE = 'player_profiles';
   const APP_CONFIG_TABLE = 'app_config';
   const DISPLAY_PLAYERS_VIEW = 'public_players_display';
+
   const PUBLIC_APP_CONFIG_VIEW = 'public_app_config';
   const PUBLIC_PLAYER_SESSIONS_VIEW = 'public_player_sessions';
   const PLAYER_ACCESS_FUNCTION = 'player-access';
@@ -20,8 +20,8 @@
     if (!client) {
       client = window.supabase.createClient(globalConfig.url, projectKey, {
         auth: {
-          persistSession: false,
-          autoRefreshToken: false,
+          persistSession: true,
+          autoRefreshToken: true,
           detectSessionInUrl: false
         }
       });
@@ -32,7 +32,6 @@
   function isoNow() {
     return new Date().toISOString();
   }
-
   function toNullableInteger(value) {
     const parsed = parseInt(value, 10);
     return Number.isFinite(parsed) ? parsed : null;
@@ -45,6 +44,10 @@
 
   function tableHasSessionId(tableName) {
     return tableName === SESSION_PLAYERS_TABLE;
+  }
+
+  function tableHasUpdatedBy(tableName) {
+    return tableName === SESSION_PLAYERS_TABLE || tableName === PLAYER_SESSIONS_TABLE;
   }
 
   function levelBaseRating(level) {
@@ -102,6 +105,8 @@
       unpairMain: !!row.unpair_main,
       partnerSlot: row.partner_slot || null,
       sortOrder: Number.isFinite(Number(row.sort_order)) ? Number(row.sort_order) : null,
+      version: Number.isFinite(Number(row.version)) ? Number(row.version) : null,
+      updatedBy: row.updated_by || null,
       createdAt: row.created_at || null,
       updatedAt: row.updated_at || null
     };
@@ -113,6 +118,8 @@
       id: 'global',
       sessionId: source.id || source.session_id || null,
       activeSessionId: source.active_session_id || source.id || source.session_id || null,
+      hostUserId: source.host_user_id || source.hostUserId || null,
+      ownershipVersion: Number.isFinite(Number(source.ownership_version)) ? Number(source.ownership_version) : null,
       location: source.location || null,
       checkinEnabled: !!source.checkin_enabled,
       checkinOpenAt: source.checkin_open_at || null,
@@ -120,6 +127,8 @@
       playAt: source.play_at || null,
       courtEnabledStates: cloneArray(source.court_enabled_states),
       layoutState: source.layout_state || null,
+      version: Number.isFinite(Number(source.version)) ? Number(source.version) : null,
+      updatedBy: source.updated_by || null,
       createdAt: source.created_at || null,
       updatedAt: source.updated_at || null
     };
@@ -157,6 +166,10 @@
       updated_at: player.updatedAt || isoNow()
     };
 
+    if (tableHasUpdatedBy(tableName)) {
+      payload.updated_by = player.updatedBy || player.updated_by || null;
+    }
+
     if (tableHasSessionId(tableName)) {
       payload.session_id = sessionId || player.sessionId || null;
       payload.sort_order = Number.isFinite(Number(player.sortOrder)) ? Number(player.sortOrder) : null;
@@ -177,6 +190,8 @@
       play_at: null,
       court_enabled_states: null,
       layout_state: null,
+      version: null,
+      updated_by: null,
       created_at: null,
       updated_at: null
     };
@@ -184,10 +199,18 @@
 
   function mapConfigRow(row) {
     const source = row || defaultConfigRow();
+    const normalizeSessionId = value => {
+      const normalized = String(value || '').trim();
+      if (!normalized) return null;
+      return normalized.toLowerCase() === 'global' ? null : normalized;
+    };
+    const sessionId = normalizeSessionId(source.session_id) || normalizeSessionId(source.id);
+    const activeSessionId = normalizeSessionId(source.active_session_id) || sessionId;
     return {
       id: source.id || 'global',
-      sessionId: source.session_id || null,
-      activeSessionId: source.active_session_id || source.session_id || null,
+      sessionId,
+      activeSessionId,
+      hostUserId: source.host_user_id || source.hostUserId || null,
       location: source.location || null,
       checkinEnabled: !!source.checkin_enabled,
       checkinOpenAt: source.checkin_open_at || null,
@@ -195,6 +218,8 @@
       playAt: source.play_at || null,
       courtEnabledStates: cloneArray(source.court_enabled_states),
       layoutState: source.layout_state || null,
+      version: Number.isFinite(Number(source.version)) ? Number(source.version) : null,
+      updatedBy: source.updated_by || null,
       createdAt: source.created_at || null,
       updatedAt: source.updated_at || null
     };
@@ -279,7 +304,7 @@
   async function fetchSelectablePlayerSessions() {
     const supabaseClient = getClient();
     if (!supabaseClient) return [];
-    const source = hasServiceRoleKey ? PLAYER_SESSIONS_TABLE : PUBLIC_PLAYER_SESSIONS_VIEW;
+    const source = PUBLIC_PLAYER_SESSIONS_VIEW;
     const { data, error } = await supabaseClient
       .from(source)
       .select('*')
@@ -301,10 +326,7 @@
       const { data, error } = await supabaseClient.rpc('display_players_public_by_session', {
         p_session_id: sessionId
       });
-      if (error) {
-        if (hasServiceRoleKey) return fetchTablePlayers(SESSION_PLAYERS_TABLE, { sessionId });
-        throw error;
-      }
+      if (error) throw error;
       return (data || []).map(mapRemotePlayer).filter(Boolean);
     }
     const { data, error } = await supabaseClient
@@ -448,14 +470,18 @@
     const supabaseClient = getClient();
     if (!supabaseClient) return mapConfigRow(null);
     if (sessionId) {
-      if (hasServiceRoleKey) return fetchPlayerSession(sessionId);
       const { data, error } = await supabaseClient
-        .from(PUBLIC_PLAYER_SESSIONS_VIEW)
+        .from(PLAYER_SESSIONS_TABLE)
         .select('*')
-        .eq('session_id', sessionId)
+        .eq('id', sessionId)
         .maybeSingle();
       if (error) throw error;
-      return mapConfigRow(data ? { ...data, id: 'global' } : null);
+      return mapConfigRow(data ? {
+        ...data,
+        id: 'global',
+        session_id: data.id || data.session_id || sessionId,
+        active_session_id: data.id || data.active_session_id || data.session_id || sessionId
+      } : null);
     }
     const { data, error } = await supabaseClient
       .from(PUBLIC_APP_CONFIG_VIEW)
@@ -464,6 +490,88 @@
       .maybeSingle();
     if (error) throw error;
     return mapConfigRow(data);
+  }
+
+  async function fetchAuthenticatedUser() {
+    const supabaseClient = getClient();
+    if (!supabaseClient) return null;
+    const { data, error } = await supabaseClient.auth.getUser();
+    if (error) throw error;
+    const user = data && data.user ? data.user : null;
+    if (!user || !user.id) return null;
+    return {
+      id: user.id,
+      email: user.email || null
+    };
+  }
+
+  async function fetchAuthSession() {
+    const supabaseClient = getClient();
+    if (!supabaseClient) return null;
+    const { data, error } = await supabaseClient.auth.getSession();
+    if (error) throw error;
+    const session = data && data.session ? data.session : null;
+    if (!session) return null;
+    return {
+      accessToken: session.access_token || null,
+      expiresAt: Number.isFinite(Number(session.expires_at)) ? Number(session.expires_at) : null,
+      user: session.user ? {
+        id: session.user.id || null,
+        email: session.user.email || null
+      } : null
+    };
+  }
+
+  async function signInAdminWithPassword(email, password) {
+    const supabaseClient = getClient();
+    if (!supabaseClient) throw new Error('Supabase client is not configured.');
+    const normalizedEmail = String(email || '').trim();
+    if (!normalizedEmail) throw new Error('Email is required.');
+    if (!password) throw new Error('Password is required.');
+
+    const { data, error } = await supabaseClient.auth.signInWithPassword({
+      email: normalizedEmail,
+      password
+    });
+    if (error) throw error;
+    return {
+      user: data && data.user ? {
+        id: data.user.id || null,
+        email: data.user.email || null
+      } : null,
+      session: data && data.session ? {
+        expiresAt: Number.isFinite(Number(data.session.expires_at)) ? Number(data.session.expires_at) : null
+      } : null
+    };
+  }
+
+  async function signOutAdminSession() {
+    const supabaseClient = getClient();
+    if (!supabaseClient) return;
+    const { error } = await supabaseClient.auth.signOut();
+    if (error) throw error;
+  }
+
+  function subscribeToAuthStateChange(callback) {
+    const supabaseClient = getClient();
+    if (!supabaseClient || typeof callback !== 'function') return function () {};
+    const subscription = supabaseClient.auth.onAuthStateChange((event, session) => {
+      const expiresAtRaw = session ? Number(session.expires_at) : NaN;
+      const expiresAt = Number.isFinite(expiresAtRaw) ? expiresAtRaw : null;
+      callback(event, {
+        expiresAt,
+        user: session && session.user ? {
+          id: session.user.id || null,
+          email: session.user.email || null
+        } : null
+      });
+    });
+    return function () {
+      try {
+        const sub = subscription && subscription.data ? subscription.data.subscription : null;
+        if (sub && typeof sub.unsubscribe === 'function') sub.unsubscribe();
+      } catch (error) {}
+    };
   }
 
   function toPlayerSessionPayload(config, sessionId) {
@@ -476,6 +584,7 @@
       play_at: config.playAt || null,
       court_enabled_states: cloneArray(config.courtEnabledStates),
       layout_state: config.layoutState || null,
+      updated_by: config.updatedBy || null,
       created_at: config.createdAt || isoNow(),
       updated_at: config.updatedAt || isoNow()
     };
@@ -492,6 +601,8 @@
       play_at: config.playAt || null,
       court_enabled_states: cloneArray(config.courtEnabledStates),
       layout_state: config.layoutState || null,
+      version: Number.isFinite(Number(config.version)) ? Number(config.version) : 0,
+      updated_by: config.updatedBy || null,
       created_at: config.createdAt || isoNow(),
       updated_at: config.updatedAt || isoNow()
     });
@@ -516,28 +627,12 @@
       play_at: config.playAt || null,
       court_enabled_states: cloneArray(config.courtEnabledStates),
       layout_state: config.layoutState || null,
+      version: Number.isFinite(Number(config.version)) ? Number(config.version) : 0,
+      updated_by: config.updatedBy || null,
       created_at: config.createdAt || isoNow(),
       updated_at: config.updatedAt || isoNow()
     });
     const payload = toPlayerSessionPayload(config, config.sessionId);
-    const expectedUpdatedAt = config.expectedUpdatedAt || null;
-    if (expectedUpdatedAt) {
-      const { data, error } = await supabaseClient
-        .from(PLAYER_SESSIONS_TABLE)
-        .update(payload)
-        .eq('id', config.sessionId)
-        .eq('updated_at', expectedUpdatedAt)
-        .select('*')
-        .maybeSingle();
-      if (error) throw error;
-      if (!data) {
-        const conflictError = new Error('Player session was updated by another admin. Reloading latest session state.');
-        conflictError.code = 'STALE_PLAYER_SESSION';
-        throw conflictError;
-      }
-      return mapPlayerSessionRow(data);
-    }
-
     const { data, error } = await supabaseClient
       .from(PLAYER_SESSIONS_TABLE)
       .upsert(payload, { onConflict: 'id' })
@@ -550,18 +645,66 @@
   async function setActivePlayerSession(sessionId) {
     const supabaseClient = getClient();
     if (!supabaseClient) return mapConfigRow({ id: 'global', session_id: sessionId, active_session_id: sessionId, updated_at: isoNow() });
-    const payload = {
-      id: 'global',
-      active_session_id: sessionId || null,
-      updated_at: isoNow()
-    };
-    const { data, error } = await supabaseClient
-      .from(APP_CONFIG_TABLE)
-      .upsert(payload, { onConflict: 'id' })
-      .select('*')
-      .single();
+    const { data, error } = await supabaseClient.rpc('set_active_player_session', {
+      p_session_id: sessionId || null
+    });
     if (error) throw error;
+    if (!data || typeof data !== 'object') {
+      throw new Error('set_active_player_session returned invalid payload.');
+    }
     return mapConfigRow(data);
+  }
+
+  async function commitMatchResult(payload, options = {}) {
+    const supabaseClient = getClient();
+    if (!supabaseClient) throw new Error('Supabase client is not configured.');
+    const rpcPayload = {
+      p_payload: payload || {},
+      p_test_fault_step: options && typeof options.testFaultStep === 'string'
+        ? options.testFaultStep
+        : null
+    };
+    const { data, error } = await supabaseClient.rpc('commit_match_result', rpcPayload);
+    if (error) throw error;
+    return data || null;
+  }
+
+  async function transferSessionHost(sessionId, targetAdmin) {
+    const supabaseClient = getClient();
+    if (!supabaseClient) throw new Error('Supabase client is not configured.');
+    const normalizedSessionId = String(sessionId || '').trim();
+    const normalizedTarget = String(targetAdmin || '').trim();
+    if (!normalizedSessionId) throw new Error('Session id is required.');
+    if (!normalizedTarget) throw new Error('Target admin is required.');
+
+    const { data, error } = await supabaseClient.rpc('transfer_player_session_host', {
+      p_session_id: normalizedSessionId,
+      p_target_admin: normalizedTarget
+    });
+    if (error) throw error;
+    if (!data || typeof data !== 'object') {
+      throw new Error('transfer_player_session_host returned invalid payload.');
+    }
+    return mapPlayerSessionRow(data);
+  }
+
+  async function fetchPrivateAdminRegistry() {
+    const response = await fetch('/admin-auth/registry', {
+      method: 'GET',
+      credentials: 'same-origin',
+      cache: 'no-store'
+    });
+    if (!response.ok) {
+      const text = await response.text().catch(() => '');
+      throw new Error(text || `Registry request failed (${response.status}).`);
+    }
+    const payload = await response.json().catch(() => ({}));
+    const records = Array.isArray(payload?.admins) ? payload.admins : [];
+    return records.map(record => ({
+      username: String(record?.username || '').trim().toLowerCase(),
+      displayName: String(record?.displayName || '').trim(),
+      userId: String(record?.supabaseUserId || '').trim().toLowerCase()
+    })).filter(record => record.username && record.userId);
   }
 
   function toErrorMessage(error, fallbackMessage) {
@@ -615,8 +758,8 @@
     return invokePlayerAccess('register', { player, sessionId });
   }
 
-  async function savePlayerAccess(player, sessionId) {
-    return invokePlayerAccess('save', { player, sessionId });
+  async function savePlayerAccess(player, sessionId, accessToken = null) {
+    return invokePlayerAccess('save', { player, sessionId, accessToken });
   }
 
   async function cancelPlayerAccess(payload) {
@@ -626,7 +769,7 @@
   function subscribeToTable(tableName, callback, options = {}) {
     const supabaseClient = getClient();
     if (!supabaseClient) return function () {};
-    const subscriptionConfig = { event: '*', schema: 'public', table: tableName };
+    const subscriptionConfig = { event: options.event || '*', schema: 'public', table: tableName };
     if (options.filter) subscriptionConfig.filter = options.filter;
     const channel = supabaseClient
       .channel('badminton-' + tableName + '-' + Math.random().toString(36).slice(2, 8))
@@ -643,7 +786,6 @@
   }
 
   function subscribeToAppConfig(callback) {
-    if (!hasServiceRoleKey) return function () {};
     const unsubscribeAppConfig = subscribeToTable(APP_CONFIG_TABLE, callback);
     const unsubscribeSessions = subscribeToTable(PLAYER_SESSIONS_TABLE, callback);
     return function () {
@@ -695,7 +837,7 @@
 
   function getMissingConfigMessage() {
     if (!hasSupabaseLibrary) return 'Missing Supabase JS library.';
-    if (!globalConfig.url || !projectKey) return 'Fill url plus anonKey or serviceRoleKey in config.';
+    if (!globalConfig.url || !projectKey) return 'Fill url plus anonKey in config.';
     return '';
   }
 
@@ -709,6 +851,8 @@
     createPlayerSession: createPlayerSession,
     updatePlayerSession: updatePlayerSession,
     setActivePlayerSession: setActivePlayerSession,
+    commitMatchResult: commitMatchResult,
+    transferSessionHost: transferSessionHost,
     fetchPlayers: fetchPlayers,
     fetchDisplayPlayers: fetchDisplayPlayers,
     findPlayerByPhone: findPlayerByPhone,
@@ -724,6 +868,12 @@
     deletePlayerSession: deletePlayerSession,
     deletePlayer: deletePlayer,
     fetchAppConfig: fetchAppConfig,
+    fetchAuthenticatedUser: fetchAuthenticatedUser,
+    fetchAuthSession: fetchAuthSession,
+    signInAdminWithPassword: signInAdminWithPassword,
+    signOutAdminSession: signOutAdminSession,
+    fetchPrivateAdminRegistry: fetchPrivateAdminRegistry,
+    subscribeToAuthStateChange: subscribeToAuthStateChange,
     subscribeToPlayers: subscribeToPlayers,
     subscribeToAppConfig: subscribeToAppConfig,
     subscribeToAdminPresence: subscribeToAdminPresence,

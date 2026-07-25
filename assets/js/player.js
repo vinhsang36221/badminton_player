@@ -12,6 +12,26 @@ const PLAYER_LEVEL_LABELS = {
   10: 'Giỏi'
 };
 
+const sessionCapabilities = {
+  canReadSession: true,
+  canWriteSession: true,
+  canEditLayout: false,
+  canEditPlayers: false,
+  canEnterResult: false
+};
+
+const MEMBER_ACCESS_TOKEN_STORAGE_KEY = 'badminton_member_access_tokens_v1';
+
+function requireSessionReadPermission(action = 'read') {
+  if (!sessionCapabilities.canReadSession) throw new Error(`Session read permission required for ${action}.`);
+  return true;
+}
+
+function requireHostWritePermission(action = 'write') {
+  if (!sessionCapabilities.canWriteSession) throw new Error(`Member runtime is read-only. Write rejected for ${action}.`);
+  return true;
+}
+
 function createEmptyPlayerWindowConfig(overrides = {}) {
   return {
     sessionId: null,
@@ -31,12 +51,59 @@ let availablePlayerSessions = [];
 let activePlayer = null;
 let activePlayerProfile = null;
 let activeSessionPlayer = null;
+let activeMemberAccessToken = null;
 let appReady = false;
 let playerSettingsSubscription = null;
 let duplicateNameCheckTimer = null;
 let duplicateNameCheckSequence = 0;
 let hasDuplicateRegisterName = false;
 const PLAYER_NAME_MAX_LENGTH = 13;
+const lastAppliedSessionVersionById = new Map();
+const lastAppliedSessionSignatureById = new Map();
+
+function loadMemberAccessTokenMap() {
+  try {
+    const raw = localStorage.getItem(MEMBER_ACCESS_TOKEN_STORAGE_KEY);
+    if (!raw) return {};
+    const parsed = JSON.parse(raw);
+    return parsed && typeof parsed === 'object' ? parsed : {};
+  } catch (error) {
+    return {};
+  }
+}
+
+function saveMemberAccessTokenMap(tokenMap) {
+  try {
+    localStorage.setItem(MEMBER_ACCESS_TOKEN_STORAGE_KEY, JSON.stringify(tokenMap || {}));
+  } catch (error) {
+  }
+}
+
+function buildMemberAccessTokenKey(sessionId, playerId, phone) {
+  return `${sessionId || 'no-session'}|${playerId || ''}|${normalizePhoneInputValue(phone || '')}`;
+}
+
+function rememberMemberAccessToken(sessionId, player, accessToken) {
+  if (!accessToken || !player || !player.id) return;
+  const tokenMap = loadMemberAccessTokenMap();
+  tokenMap[buildMemberAccessTokenKey(sessionId, player.id, player.phone)] = accessToken;
+  saveMemberAccessTokenMap(tokenMap);
+}
+
+function forgetMemberAccessToken(sessionId, player) {
+  if (!player || !player.id) return;
+  const tokenMap = loadMemberAccessTokenMap();
+  const tokenKey = buildMemberAccessTokenKey(sessionId, player.id, player.phone);
+  if (!Object.prototype.hasOwnProperty.call(tokenMap, tokenKey)) return;
+  delete tokenMap[tokenKey];
+  saveMemberAccessTokenMap(tokenMap);
+}
+
+function getMemberAccessToken(sessionId, player) {
+  if (!player || !player.id) return null;
+  const tokenMap = loadMemberAccessTokenMap();
+  return tokenMap[buildMemberAccessTokenKey(sessionId, player.id, player.phone)] || null;
+}
 
 function playerNow() {
   return new Date();
@@ -82,17 +149,20 @@ function canLookupPlayers(config = playerWindowConfig) {
 }
 
 function canRegisterNewPlayers(config = playerWindowConfig) {
+  if (!sessionCapabilities.canWriteSession) return false;
   if (!hasSelectedPlayerSession(config)) return false;
   return getPlayerAccessPhase(config) === 'checkin-open';
 }
 
 function canManageRegisteredPlayers(config = playerWindowConfig) {
+  if (!sessionCapabilities.canWriteSession) return false;
   if (!hasSelectedPlayerSession(config)) return false;
   const phase = getPlayerAccessPhase(config);
   return phase === 'checkin-open' || phase === 'after-close';
 }
 
 function canCancelRegisteredPlayers(config = playerWindowConfig) {
+  if (!sessionCapabilities.canWriteSession) return false;
   if (!hasSelectedPlayerSession(config)) return false;
   return getPlayerAccessPhase(config) === 'checkin-open';
 }
@@ -235,6 +305,47 @@ function formatRegisterNameValue(value) {
 
 function formatRegisterNameDraftValue(value) {
   return String(value || '').slice(0, PLAYER_NAME_MAX_LENGTH);
+}
+
+function buildPlayerSessionConfigSignature(config) {
+  return JSON.stringify({
+    sessionId: config && config.sessionId ? config.sessionId : null,
+    checkinEnabled: !!(config && config.checkinEnabled),
+    checkinOpenAt: config && config.checkinOpenAt ? config.checkinOpenAt : null,
+    checkinCloseAt: config && config.checkinCloseAt ? config.checkinCloseAt : null,
+    playAt: config && config.playAt ? config.playAt : null,
+    updatedAt: config && config.updatedAt ? config.updatedAt : null
+  });
+}
+
+function shouldApplyIncomingSessionConfig(config) {
+  const sessionId = (config && config.sessionId) || 'global';
+  const incomingVersion = Number.isFinite(Number(config && config.version)) ? Number(config.version) : null;
+  const incomingSignature = buildPlayerSessionConfigSignature(config || {});
+  const previousVersion = lastAppliedSessionVersionById.has(sessionId)
+    ? lastAppliedSessionVersionById.get(sessionId)
+    : null;
+  const previousSignature = lastAppliedSessionSignatureById.has(sessionId)
+    ? lastAppliedSessionSignatureById.get(sessionId)
+    : null;
+  let decision = 'apply';
+
+  if (incomingVersion !== null && previousVersion !== null) {
+    if (incomingVersion < previousVersion) decision = 'ignore_older';
+    else if (incomingVersion === previousVersion && incomingSignature === previousSignature) decision = 'ignore_duplicate';
+  }
+
+  console.info('memberRealtimeMonotonic', {
+    incomingVersion,
+    lastAppliedVersion: previousVersion,
+    decision,
+    stateSignature: incomingSignature
+  });
+
+  if (decision !== 'apply') return false;
+  if (incomingVersion !== null) lastAppliedSessionVersionById.set(sessionId, incomingVersion);
+  lastAppliedSessionSignatureById.set(sessionId, incomingSignature);
+  return true;
 }
 
 function normalizePhoneInputValue(value) {
@@ -533,6 +644,7 @@ function resetActivePlayerState() {
   activePlayer = null;
   activePlayerProfile = null;
   activeSessionPlayer = null;
+  activeMemberAccessToken = null;
   updateManageSubmitButton();
 }
 
@@ -569,6 +681,7 @@ function setActivePlayerRecords(profile, sessionPlayer) {
   activePlayerProfile = profile || null;
   activeSessionPlayer = sessionPlayer || null;
   activePlayer = mergePlayerRecords(profile, sessionPlayer);
+  activeMemberAccessToken = getMemberAccessToken(getSelectedPlayerSessionId(), activeSessionPlayer || activePlayer);
 }
 
 function updateManageSubmitButton() {
@@ -597,6 +710,9 @@ async function loadWindowConfig(sessionId) {
   }
 
   const remoteConfig = await window.BadmintonBackend.fetchAppConfig(sessionId);
+  if (!shouldApplyIncomingSessionConfig(remoteConfig || {})) {
+    return;
+  }
   playerWindowConfig = createEmptyPlayerWindowConfig({
     ...(remoteConfig || {}),
     sessionId: (remoteConfig && remoteConfig.sessionId) || sessionId,
@@ -680,7 +796,11 @@ async function lookupPlayerByPhone(phone) {
   if (sessionPlayer) {
     setActivePlayerRecords(profile || sessionPlayer, sessionPlayer);
     showManageCard(activePlayer);
-    setFeedback('Đã tải thông tin player trong khung thời gian đang chọn. Bạn có thể cập nhật thông tin hoặc hủy đăng ký.', 'success');
+    if (activeMemberAccessToken) {
+      setFeedback('Đã tải thông tin player trong khung thời gian đang chọn. Bạn có thể cập nhật thông tin hoặc hủy đăng ký.', 'success');
+    } else {
+      setFeedback('Đã tải thông tin player, nhưng thiết bị này chưa có access token để cập nhật/hủy. Hãy đăng ký lại bằng thiết bị đã dùng trước đó hoặc nhờ admin hỗ trợ.', 'warning');
+    }
     return;
   }
 
@@ -782,6 +902,12 @@ async function handleLookupSubmit(event) {
 
 async function handleRegisterSubmit(event) {
   event.preventDefault();
+  try {
+    requireHostWritePermission('registerPlayerAccess');
+  } catch (error) {
+    setFeedback(error.message || 'Member runtime is read-only.', 'warning');
+    return;
+  }
   if (!canRegisterNewPlayers(playerWindowConfig)) {
     setFeedback('Khung giờ đăng ký mới đã đóng.', 'warning');
     return;
@@ -805,6 +931,11 @@ async function handleRegisterSubmit(event) {
     const response = await window.BadmintonBackend.registerPlayerAccess(player, getSelectedPlayerSessionId());
     const savedProfile = response && response.profile ? response.profile : null;
     const savedSession = response && response.sessionPlayer ? response.sessionPlayer : null;
+    const accessToken = response && typeof response.accessToken === 'string' ? response.accessToken : null;
+    if (accessToken && savedSession) {
+      rememberMemberAccessToken(getSelectedPlayerSessionId(), savedSession, accessToken);
+      activeMemberAccessToken = accessToken;
+    }
     const successMessage = appendDuplicateNameNotice(
       'Hãy chuyển status => Ready khi đến sân nhé.\nHẹn gặp lại bạn.',
       response
@@ -820,12 +951,22 @@ async function handleRegisterSubmit(event) {
 
 async function handleManageSubmit(event) {
   event.preventDefault();
+  try {
+    requireHostWritePermission('savePlayerAccess');
+  } catch (error) {
+    setFeedback(error.message || 'Member runtime is read-only.', 'warning');
+    return;
+  }
   if (!activePlayer) return;
   if (!canManageRegisteredPlayers(playerWindowConfig)) {
     setFeedback('Hiện chưa đến thời gian cho phép truy suất player đã đăng ký.', 'warning');
     return;
   }
   const wasRegisteredInCurrentSession = !!activeSessionPlayer;
+  if (wasRegisteredInCurrentSession && !activeMemberAccessToken) {
+    setFeedback('Thiếu access token cho player này trên thiết bị hiện tại. Không thể cập nhật.', 'warning');
+    return;
+  }
   const nextPlayer = {
     ...(activePlayerProfile || activePlayer),
     ...(activeSessionPlayer || {}),
@@ -847,9 +988,14 @@ async function handleManageSubmit(event) {
     updatedAt: new Date().toISOString()
   };
   try {
-    const response = await window.BadmintonBackend.savePlayerAccess(nextPlayer, getSelectedPlayerSessionId());
+    const response = await window.BadmintonBackend.savePlayerAccess(nextPlayer, getSelectedPlayerSessionId(), activeMemberAccessToken);
     const savedProfile = response && response.profile ? response.profile : null;
     const savedSession = response && response.sessionPlayer ? response.sessionPlayer : null;
+    const accessToken = response && typeof response.accessToken === 'string' ? response.accessToken : null;
+    if (accessToken && savedSession) {
+      rememberMemberAccessToken(getSelectedPlayerSessionId(), savedSession, accessToken);
+      activeMemberAccessToken = accessToken;
+    }
     setActivePlayerRecords(savedProfile, savedSession);
     showManageCard(activePlayer);
     const successMessage = appendDuplicateNameNotice(
@@ -869,6 +1015,12 @@ async function handleManageSubmit(event) {
 }
 
 async function handleCancelRegistration() {
+  try {
+    requireHostWritePermission('cancelPlayerAccess');
+  } catch (error) {
+    setFeedback(error.message || 'Member runtime is read-only.', 'warning');
+    return;
+  }
   if (!activeSessionPlayer || !activeSessionPlayer.id) {
     setFeedback('Player này chưa có trong danh sách của khung thời gian đang chọn để hủy.', 'warning');
     return;
@@ -878,13 +1030,21 @@ async function handleCancelRegistration() {
     return;
   }
 
+  if (!activeMemberAccessToken) {
+    setFeedback('Thiếu access token cho player này trên thiết bị hiện tại. Không thể hủy đăng ký.', 'warning');
+    return;
+  }
+
   const phone = activePlayer && activePlayer.phone ? activePlayer.phone : '';
   try {
     await window.BadmintonBackend.cancelPlayerAccess({
       phone,
       sessionId: getSelectedPlayerSessionId(),
-      sessionPlayerId: activeSessionPlayer.id
+      sessionPlayerId: activeSessionPlayer.id,
+      accessToken: activeMemberAccessToken
     });
+    forgetMemberAccessToken(getSelectedPlayerSessionId(), activeSessionPlayer);
+    activeMemberAccessToken = null;
     if (phone) {
       await lookupPlayerByPhone(phone);
     } else {
@@ -914,6 +1074,7 @@ async function handlePlayerSessionChange(event) {
 }
 
 async function startPlayerPage() {
+  requireSessionReadPermission('startPlayerPage');
   const warning = document.getElementById('playerConfigWarning');
   if (!window.BadmintonBackend || !window.BadmintonBackend.isConfigured) {
     if (warning) {
@@ -1022,5 +1183,25 @@ document.addEventListener('keydown', event => {
     if (popup && !popup.classList.contains('d-none')) closeSuccessPopup();
   }
 });
+
+if (typeof window !== 'undefined') {
+  window.__badmintonMemberMonotonicTest = {
+    applySyntheticConfig: config => shouldApplyIncomingSessionConfig(config || {}),
+    reset: () => {
+      lastAppliedSessionVersionById.clear();
+      lastAppliedSessionSignatureById.clear();
+    },
+    getRuntimeState: () => ({
+      sessionId: getSelectedPlayerSessionId(),
+      configVersion: Number.isFinite(Number(playerWindowConfig.version)) ? Number(playerWindowConfig.version) : null,
+      configUpdatedAt: playerWindowConfig.updatedAt || null,
+      configSignature: buildPlayerSessionConfigSignature(playerWindowConfig)
+    }),
+    snapshot: () => ({
+      versions: Array.from(lastAppliedSessionVersionById.entries()),
+      signatures: Array.from(lastAppliedSessionSignatureById.entries())
+    })
+  };
+}
 
 startPlayerPage();
