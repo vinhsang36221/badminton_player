@@ -156,11 +156,9 @@ function getSessionLocationLabel(session) {
 
 function formatPlayerSessionOptionLabel(session) {
   if (!session || !session.sessionId) return 'Session không hợp lệ';
-  const locationText = session.location ? `${escapeOptionLabel(session.location)} | ` : '';
-  const openText = formatWindowDate(session.checkinOpenAt);
-  const closeText = formatWindowDate(session.checkinCloseAt);
+  const locationText = session.location ? escapeOptionLabel(session.location) : 'Chưa chọn địa điểm';
   const playAtText = formatWindowDate(session.playAt);
-  return `${locationText}${openText} -> ${closeText} | Play ${playAtText}`;
+  return `${locationText} | Play ${playAtText}`;
 }
 
 function levelLabel(level) {

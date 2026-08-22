@@ -100,6 +100,26 @@ body.player-page-bg::before {
 	gap: 2px;
 }
 
+#supabaseSyncNotice {
+	position: relative;
+	z-index: 2;
+	width: 100%;
+	white-space: normal;
+	overflow-wrap: anywhere;
+	word-break: break-word;
+	padding: 0.5rem 0.75rem;
+	line-height: 1.35;
+	font-size: 0.92rem;
+	pointer-events: none;
+}
+
+@media (max-width: 767px) {
+	#supabaseSyncNotice {
+		font-size: 0.88rem;
+		padding: 0.45rem 0.65rem;
+	}
+}
+
 .card-player { min-width: 120px; }
 .court-card { margin-bottom: 12px; }
 /* Show courts in reverse DOM order so Sân 12 appears on top */

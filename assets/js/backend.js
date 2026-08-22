@@ -7,6 +7,8 @@
   const SESSION_PLAYERS_TABLE = 'players';
   const PLAYER_PROFILES_TABLE = 'player_profiles';
   const APP_CONFIG_TABLE = 'app_config';
+  const ADMIN_DEVICE_LOGIN_TABLE = 'admin_device_login_state';
+  const MATCH_RESULT_COMMANDS_TABLE = 'match_result_commands';
   const DISPLAY_PLAYERS_VIEW = 'public_players_display';
 
   const PUBLIC_APP_CONFIG_VIEW = 'public_app_config';
@@ -225,6 +227,21 @@
     };
   }
 
+  function mapAdminDeviceLoginStateRow(row) {
+    if (!row || typeof row !== 'object') return null;
+    return {
+      authUserId: row.auth_user_id || row.authUserId || null,
+      activeClientId: row.active_client_id || row.activeClientId || null,
+      activeHeartbeatAt: row.active_heartbeat_at || row.activeHeartbeatAt || null,
+      pendingClientId: row.pending_client_id || row.pendingClientId || null,
+      pendingRequestId: row.pending_request_id || row.pendingRequestId || null,
+      status: row.status || null,
+      requestedAt: row.requested_at || row.requestedAt || null,
+      expiresAt: row.expires_at || row.expiresAt || null,
+      updatedAt: row.updated_at || row.updatedAt || null
+    };
+  }
+
   async function fetchTablePlayers(tableName, options = {}) {
     const supabaseClient = getClient();
     if (!supabaseClient) return [];
@@ -289,12 +306,16 @@
     return mapPlayerSessionRow(data);
   }
 
+  // Dropdown/list needs metadata only. Never pull layout_state or history here so
+  // the payload does not scale with the total layout size of every session.
+  const PLAYER_SESSION_METADATA_COLUMNS = 'id,location,checkin_enabled,checkin_open_at,checkin_close_at,play_at,created_at';
+
   async function fetchPlayerSessions() {
     const supabaseClient = getClient();
     if (!supabaseClient) return [];
     const { data, error } = await supabaseClient
       .from(PLAYER_SESSIONS_TABLE)
-      .select('*')
+      .select(PLAYER_SESSION_METADATA_COLUMNS)
       .order('checkin_open_at', { ascending: false, nullsFirst: false })
       .order('created_at', { ascending: false });
     if (error) throw error;
@@ -548,8 +569,13 @@
   async function signOutAdminSession() {
     const supabaseClient = getClient();
     if (!supabaseClient) return;
-    const { error } = await supabaseClient.auth.signOut();
-    if (error) throw error;
+    let response = null;
+    try {
+      response = await supabaseClient.auth.signOut({ scope: 'local' });
+    } catch (error) {
+      response = await supabaseClient.auth.signOut();
+    }
+    if (response && response.error) throw response.error;
   }
 
   function subscribeToAuthStateChange(callback) {
@@ -574,6 +600,14 @@
     };
   }
 
+  function stripDebugLogFromLayout(layoutState) {
+    if (!layoutState || typeof layoutState !== 'object') return layoutState || null;
+    // debug_log (client diagnostic, up to ~MBs) is never persisted remotely; it is merged from
+    // local on apply. Keeps session writes small on every save path (config sync, create/update).
+    const { debug_log, ...rest } = layoutState;
+    return rest;
+  }
+
   function toPlayerSessionPayload(config, sessionId) {
     return {
       id: sessionId || config.sessionId,
@@ -583,7 +617,7 @@
       checkin_close_at: config.checkinCloseAt || null,
       play_at: config.playAt || null,
       court_enabled_states: cloneArray(config.courtEnabledStates),
-      layout_state: config.layoutState || null,
+      layout_state: stripDebugLogFromLayout(config.layoutState),
       updated_by: config.updatedBy || null,
       created_at: config.createdAt || isoNow(),
       updated_at: config.updatedAt || isoNow()
@@ -669,6 +703,61 @@
     return data || null;
   }
 
+  async function appendAdminSessionAuditLogs(events) {
+    const supabaseClient = getClient();
+    if (!supabaseClient) throw new Error('Supabase client is not configured.');
+    const normalizedEvents = Array.isArray(events) ? events : [];
+    const { data, error } = await supabaseClient.rpc('append_admin_session_audit_logs', {
+      p_events: normalizedEvents
+    });
+    if (error) throw error;
+    const payload = data && typeof data === 'object' ? data : {};
+    return {
+      ok: payload.ok === true,
+      acceptedEventIds: Array.isArray(payload.acceptedEventIds) ? payload.acceptedEventIds : [],
+      duplicateEventIds: Array.isArray(payload.duplicateEventIds) ? payload.duplicateEventIds : [],
+      rejected: Array.isArray(payload.rejected) ? payload.rejected : [],
+      rejectedCount: Number.isFinite(Number(payload.rejectedCount)) ? Number(payload.rejectedCount) : 0
+    };
+  }
+
+  async function fetchAdminSessionAuditLogs(options = {}) {
+    const supabaseClient = getClient();
+    if (!supabaseClient) throw new Error('Supabase client is not configured.');
+    const scope = String(options.scope || 'session').trim().toLowerCase() === 'system' ? 'system' : 'session';
+    const sessionIdRaw = options.sessionId === undefined || options.sessionId === null
+      ? ''
+      : String(options.sessionId).trim();
+    const payload = {
+      p_scope: scope,
+      p_session_id: sessionIdRaw || null,
+      p_from: options.from ? String(options.from) : null,
+      p_to: options.to ? String(options.to) : null,
+      p_limit: Number.isFinite(Number(options.limit)) ? Number(options.limit) : null,
+      p_cursor_occurred_at: options.cursor && options.cursor.occurredAt ? String(options.cursor.occurredAt) : null,
+      p_cursor_id: options.cursor && Number.isFinite(Number(options.cursor.id)) ? Number(options.cursor.id) : null
+    };
+    const { data, error } = await supabaseClient.rpc('fetch_admin_session_audit_logs', payload);
+    if (error) throw error;
+    const result = data && typeof data === 'object' ? data : {};
+    return {
+      ok: result.ok === true,
+      scope: result.scope || scope,
+      sessionId: result.sessionId || null,
+      from: result.from || null,
+      to: result.to || null,
+      count: Number.isFinite(Number(result.count)) ? Number(result.count) : 0,
+      events: Array.isArray(result.events) ? result.events : [],
+      hasMore: result.hasMore === true,
+      nextCursor: result.nextCursor && typeof result.nextCursor === 'object'
+        ? {
+          occurredAt: result.nextCursor.occurredAt || null,
+          id: Number.isFinite(Number(result.nextCursor.id)) ? Number(result.nextCursor.id) : null
+        }
+        : null
+    };
+  }
+
   async function transferSessionHost(sessionId, targetAdmin) {
     const supabaseClient = getClient();
     if (!supabaseClient) throw new Error('Supabase client is not configured.');
@@ -686,6 +775,129 @@
       throw new Error('transfer_player_session_host returned invalid payload.');
     }
     return mapPlayerSessionRow(data);
+  }
+
+  function mapAdminDeviceRpcResult(payload) {
+    const source = payload && typeof payload === 'object' ? payload : {};
+    return {
+      status: source.status || null,
+      granted: source.granted === true,
+      released: source.released === true,
+      activated: source.activated === true,
+      heartbeated: source.heartbeated === true,
+      canceled: source.canceled === true,
+      reason: source.reason || null,
+      state: mapAdminDeviceLoginStateRow(source.state || null)
+    };
+  }
+
+  async function fetchAdminDeviceLoginState() {
+    const supabaseClient = getClient();
+    if (!supabaseClient) return null;
+    const { data, error } = await supabaseClient.rpc('get_admin_device_login_state');
+    if (error) throw error;
+    return mapAdminDeviceLoginStateRow(data);
+  }
+
+  async function requestAdminDeviceLoginSlot(clientId, options = {}) {
+    const supabaseClient = getClient();
+    if (!supabaseClient) throw new Error('Supabase client is not configured.');
+    const normalizedClientId = String(clientId || '').trim();
+    if (!normalizedClientId) throw new Error('Client id is required.');
+    const timeoutSeconds = Number.isFinite(Number(options?.timeoutSeconds))
+      ? Math.max(5, Math.min(180, Math.round(Number(options.timeoutSeconds))))
+      : 45;
+    const { data, error } = await supabaseClient.rpc('request_admin_device_login_slot', {
+      p_client_id: normalizedClientId,
+      p_timeout_seconds: timeoutSeconds
+    });
+    if (error) throw error;
+    return mapAdminDeviceRpcResult(data);
+  }
+
+  async function releaseAdminDeviceAfterSave(clientId, pendingRequestId) {
+    const supabaseClient = getClient();
+    if (!supabaseClient) throw new Error('Supabase client is not configured.');
+    const normalizedClientId = String(clientId || '').trim();
+    const normalizedRequestId = String(pendingRequestId || '').trim();
+    if (!normalizedClientId) throw new Error('Client id is required.');
+    if (!normalizedRequestId) throw new Error('Pending request id is required.');
+    const { data, error } = await supabaseClient.rpc('release_admin_device_after_save', {
+      p_client_id: normalizedClientId,
+      p_pending_request_id: normalizedRequestId
+    });
+    if (error) throw error;
+    return mapAdminDeviceRpcResult(data);
+  }
+
+  async function fetchMatchResultCommand(commandId, sessionId) {
+    const supabaseClient = getClient();
+    if (!supabaseClient) return null;
+    const normalizedCommandId = String(commandId || '').trim();
+    if (!normalizedCommandId) return null;
+    let query = supabaseClient
+      .from(MATCH_RESULT_COMMANDS_TABLE)
+      .select('*')
+      .eq('command_id', normalizedCommandId)
+      .limit(1);
+    if (sessionId) query = query.eq('session_id', String(sessionId));
+    const { data, error } = await query.maybeSingle();
+    if (error) throw error;
+    return data || null;
+  }
+
+  async function activateAdminDevicePending(clientId, pendingRequestId) {
+    const supabaseClient = getClient();
+    if (!supabaseClient) throw new Error('Supabase client is not configured.');
+    const normalizedClientId = String(clientId || '').trim();
+    const normalizedRequestId = String(pendingRequestId || '').trim();
+    if (!normalizedClientId) throw new Error('Client id is required.');
+    if (!normalizedRequestId) throw new Error('Pending request id is required.');
+    const { data, error } = await supabaseClient.rpc('activate_admin_device_pending', {
+      p_client_id: normalizedClientId,
+      p_pending_request_id: normalizedRequestId
+    });
+    if (error) throw error;
+    return mapAdminDeviceRpcResult(data);
+  }
+
+  async function cancelAdminDeviceLoginRequest(clientId, pendingRequestId) {
+    const supabaseClient = getClient();
+    if (!supabaseClient) throw new Error('Supabase client is not configured.');
+    const normalizedClientId = String(clientId || '').trim();
+    const normalizedRequestId = String(pendingRequestId || '').trim();
+    if (!normalizedClientId) throw new Error('Client id is required.');
+    if (!normalizedRequestId) throw new Error('Pending request id is required.');
+    const { data, error } = await supabaseClient.rpc('cancel_admin_device_login_request', {
+      p_client_id: normalizedClientId,
+      p_pending_request_id: normalizedRequestId
+    });
+    if (error) throw error;
+    return mapAdminDeviceRpcResult(data);
+  }
+
+  async function heartbeatAdminDeviceActive(clientId) {
+    const supabaseClient = getClient();
+    if (!supabaseClient) throw new Error('Supabase client is not configured.');
+    const normalizedClientId = String(clientId || '').trim();
+    if (!normalizedClientId) throw new Error('Client id is required.');
+    const { data, error } = await supabaseClient.rpc('heartbeat_admin_device_active', {
+      p_client_id: normalizedClientId
+    });
+    if (error) throw error;
+    return mapAdminDeviceRpcResult(data);
+  }
+
+  async function releaseAdminDeviceOnSignout(clientId) {
+    const supabaseClient = getClient();
+    if (!supabaseClient) throw new Error('Supabase client is not configured.');
+    const normalizedClientId = String(clientId || '').trim();
+    if (!normalizedClientId) throw new Error('Client id is required.');
+    const { data, error } = await supabaseClient.rpc('release_admin_device_on_signout', {
+      p_client_id: normalizedClientId
+    });
+    if (error) throw error;
+    return mapAdminDeviceRpcResult(data);
   }
 
   async function fetchPrivateAdminRegistry() {
@@ -716,35 +928,6 @@
     return fallbackMessage || 'Unknown error';
   }
 
-  async function parseFunctionInvokeError(error) {
-    const defaultMessage = toErrorMessage(error, 'Cannot reach secure player endpoint.');
-    const context = error && typeof error === 'object' ? error.context : null;
-    if (!context || typeof context.clone !== 'function') return defaultMessage;
-    const statusCode = Number.isFinite(Number(context.status)) ? Number(context.status) : null;
-
-    try {
-      const response = context.clone();
-      const payload = await response.json().catch(() => null);
-      if (payload && typeof payload === 'object') {
-        const nestedMessage = toErrorMessage(payload, '');
-        if (nestedMessage) return nestedMessage;
-      }
-
-      const text = await response.text().catch(() => '');
-      if (typeof text === 'string' && text.trim()) return text.trim();
-    } catch (parseError) {
-    }
-
-    if (statusCode === 404) {
-      return `Secure player endpoint not found (404). Please deploy Supabase function "${PLAYER_ACCESS_FUNCTION}".`;
-    }
-    if (statusCode === 401 || statusCode === 403) {
-      return 'Secure player endpoint rejected access. Check Supabase key/project config.';
-    }
-
-    return defaultMessage;
-  }
-
   async function invokePlayerAccess(action, payload) {
     const supabaseClient = getClient();
     if (!supabaseClient) throw new Error('Supabase client is not configured.');
@@ -754,19 +937,7 @@
         ...(payload || {})
       }
     });
-    if (error) {
-      const status = Number.isFinite(Number(error && error.context && error.context.status))
-        ? Number(error.context.status)
-        : null;
-      const message = await parseFunctionInvokeError(error);
-      console.warn('player-access invoke failed', {
-        action,
-        status,
-        sessionId: payload && payload.sessionId ? String(payload.sessionId) : null,
-        message
-      });
-      throw new Error(message);
-    }
+    if (error) throw new Error(toErrorMessage(error, 'Cannot reach secure player endpoint.'));
     if (data && data.error) throw new Error(toErrorMessage(data, 'Secure player endpoint failed.'));
     return data || {};
   }
@@ -799,8 +970,8 @@
     return invokePlayerAccess('register', { player, sessionId });
   }
 
-  async function savePlayerAccess(player, sessionId, sessionPlayerId = null) {
-    return invokePlayerAccess('save', { player, sessionId, sessionPlayerId });
+  async function savePlayerAccess(player, sessionId, accessToken = null) {
+    return invokePlayerAccess('save', { player, sessionId, accessToken });
   }
 
   async function cancelPlayerAccess(payload) {
@@ -833,6 +1004,10 @@
       unsubscribeAppConfig();
       unsubscribeSessions();
     };
+  }
+
+  function subscribeToAdminDeviceLoginState(callback) {
+    return subscribeToTable(ADMIN_DEVICE_LOGIN_TABLE, callback);
   }
 
   function subscribeToAdminPresence(sessionId, hostInfo, callback, options = {}) {
@@ -893,7 +1068,17 @@
     updatePlayerSession: updatePlayerSession,
     setActivePlayerSession: setActivePlayerSession,
     commitMatchResult: commitMatchResult,
+    appendAdminSessionAuditLogs: appendAdminSessionAuditLogs,
+    fetchAdminSessionAuditLogs: fetchAdminSessionAuditLogs,
     transferSessionHost: transferSessionHost,
+    fetchAdminDeviceLoginState: fetchAdminDeviceLoginState,
+    requestAdminDeviceLoginSlot: requestAdminDeviceLoginSlot,
+    releaseAdminDeviceAfterSave: releaseAdminDeviceAfterSave,
+    activateAdminDevicePending: activateAdminDevicePending,
+    heartbeatAdminDeviceActive: heartbeatAdminDeviceActive,
+    releaseAdminDeviceOnSignout: releaseAdminDeviceOnSignout,
+    cancelAdminDeviceLoginRequest: cancelAdminDeviceLoginRequest,
+    fetchMatchResultCommand: fetchMatchResultCommand,
     fetchPlayers: fetchPlayers,
     fetchDisplayPlayers: fetchDisplayPlayers,
     findPlayerByPhone: findPlayerByPhone,
@@ -917,6 +1102,7 @@
     subscribeToAuthStateChange: subscribeToAuthStateChange,
     subscribeToPlayers: subscribeToPlayers,
     subscribeToAppConfig: subscribeToAppConfig,
+    subscribeToAdminDeviceLoginState: subscribeToAdminDeviceLoginState,
     subscribeToAdminPresence: subscribeToAdminPresence,
     lookupPlayerAccess: lookupPlayerAccess,
     checkDuplicatePlayerName: checkDuplicatePlayerName,
@@ -928,3 +1114,4 @@
     mapPlayerSessionRow: mapPlayerSessionRow
   };
 })();
+
