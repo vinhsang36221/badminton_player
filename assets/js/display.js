@@ -28,6 +28,12 @@ let displayPlayersUnsubscribe = null;
 let displayConfigUnsubscribe = null;
 let displayRefreshTimer = null;
 const DISPLAY_REFRESH_INTERVAL_MS = 3000;
+// Session row currently rendering and the lightweight (no layout_state) stamp of the
+// last metadata poll it came from. Heavy layout fetches only happen when the stamp moves.
+let displayResolvedSessionId = null;
+let displayLastMetaStamp = null;
+let displaySubscribedSessionId = undefined;
+let displaySessionListTick = 0;
 
 function displayEscapeOptionLabel(value) {
   return String(value || '').replace(/[&<>"']/g, character => ({
@@ -236,18 +242,40 @@ function displayRender() {
   courtsRow.innerHTML = Array.from({ length: displayGetCourtCount() }, (_, index) => displayRenderCourt(index, activeMatches[index] || null, playerMap)).join('');
 }
 
-async function displayLoadAll() {
+function displayConfigMetaStamp(config) {
+  if (!config) return 'null';
+  return `${config.sessionId || ''}|${config.updatedAt || ''}|${config.version ?? ''}`;
+}
+
+async function displayLoadAll(options = {}) {
+  const { force = false } = options;
   const sessionId = displaySelectedSessionId || null;
-  displayConfig = await window.BadmintonBackend.fetchAppConfig(sessionId);
+  // Light poll first: every column except the (large) layout_state/history blob.
+  const metadata = await window.BadmintonBackend.fetchAppConfigMetadata(sessionId);
+  const nextResolvedSessionId = sessionId || metadata?.sessionId || metadata?.activeSessionId || null;
+  const nextStamp = displayConfigMetaStamp(metadata) + `|${nextResolvedSessionId || ''}`;
+  const layoutMissing = !displayConfig || !displayConfig.layoutState || displayResolvedSessionId !== nextResolvedSessionId;
+
+  if (force || layoutMissing || nextStamp !== displayLastMetaStamp) {
+    displayConfig = await window.BadmintonBackend.fetchAppConfig(sessionId);
+  } else {
+    // Business fields (checkin window, location, ...) may move without a layout
+    // write; merge the light row but keep the cached layout blob.
+    displayConfig = { ...displayConfig, ...metadata, layoutState: displayConfig.layoutState };
+  }
+  displayResolvedSessionId = nextResolvedSessionId;
+  displayLastMetaStamp = nextStamp;
+  displayArmConfigSubscription();
+
   displayPlayers = await window.BadmintonBackend.fetchDisplayPlayers(sessionId);
   displayRenderSessionSelector();
   displayRender();
 }
 
-async function displayRefreshFromRemote() {
+async function displayRefreshFromRemote(options = {}) {
   if (!window.BadmintonBackend || !window.BadmintonBackend.isConfigured) return;
   try {
-    await displayLoadAll();
+    await displayLoadAll(options);
   } catch (error) {
     console.error('display refresh failed', error);
   }
@@ -264,9 +292,24 @@ async function displayRefreshSessions() {
   displayRenderSessionSelector();
 }
 
+function displayArmConfigSubscription() {
+  const target = displaySelectedSessionId || displayResolvedSessionId || null;
+  if (displayConfigUnsubscribe && displaySubscribedSessionId === target) return;
+  if (displayConfigUnsubscribe) displayConfigUnsubscribe();
+  displaySubscribedSessionId = target;
+  displayConfigUnsubscribe = window.BadmintonBackend.subscribeToAppConfig(async () => {
+    await displayRefreshSessions();
+    await displayRefreshFromRemote({ force: true });
+  }, target || undefined);
+}
+
 function startDisplayRefreshLoop() {
   if (displayRefreshTimer) window.clearInterval(displayRefreshTimer);
   displayRefreshTimer = window.setInterval(() => {
+    displaySessionListTick += 1;
+    // Session open/close events for other sessions no longer arrive over realtime
+    // (subscription is filtered), so refresh the selector list periodically.
+    if (displaySessionListTick % 4 === 1) void displayRefreshSessions();
     displayRefreshFromRemote();
   }, DISPLAY_REFRESH_INTERVAL_MS);
 }
@@ -283,13 +326,8 @@ async function displayStart() {
   }
 
   await displayRefreshSessions();
-  await displayLoadAll();
-
-  if (displayConfigUnsubscribe) displayConfigUnsubscribe();
-  displayConfigUnsubscribe = window.BadmintonBackend.subscribeToAppConfig(async () => {
-    await displayRefreshSessions();
-    await displayRefreshFromRemote();
-  });
+  await displayLoadAll({ force: true });
+  displayArmConfigSubscription();
 
   startDisplayRefreshLoop();
 }
@@ -298,8 +336,10 @@ const displaySessionSelect = document.getElementById('displaySessionSelect');
 if (displaySessionSelect) {
   displaySessionSelect.addEventListener('change', event => {
     displaySelectedSessionId = event && event.target ? event.target.value || null : null;
+    displayLastMetaStamp = null;
     displayRenderSessionSelector();
-    void displayRefreshFromRemote();
+    displayArmConfigSubscription();
+    void displayRefreshFromRemote({ force: true });
   });
 }
 

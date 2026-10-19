@@ -56,6 +56,12 @@
     const parsedLevel = Number.isFinite(Number(level)) ? Number(level) : 4;
     return parsedLevel * 100;
   }
+  function normalizeExtraLevel(value) {
+    const raw = String(value === undefined || value === null ? '' : value).trim().toLowerCase();
+    if (raw === 'plus' || raw === '+' || raw === 'p') return 'plus';
+    if (raw === 'minus' || raw === '-' || raw === 'm') return 'minus';
+    return 'equal';
+  }
 
   function resolveRatingAccumulated(source, level) {
     if (Number.isFinite(Number(source?.ratingAccumulated))) return Number(source.ratingAccumulated);
@@ -76,6 +82,7 @@
       && row.gender == null
       && row.level == null
       && row.prefer == null
+      && row.extra_level == null
       && row.ready == null
       && row.rating == null
       && row.rating_accumulated == null
@@ -99,6 +106,7 @@
       gender: row.gender || 'male',
       level,
       prefer: row.prefer || 'normal',
+      extraLevel: normalizeExtraLevel(row.extra_level),
       ready: row.ready !== false,
       ratingAccumulated,
       rating: levelBaseRating(level),
@@ -157,6 +165,7 @@
       gender: player.gender || 'male',
       level,
       prefer: player.prefer || 'normal',
+      extra_level: normalizeExtraLevel(player.extraLevel ?? player.extra_level),
       ready: player.ready !== false,
       rating_accumulated: ratingAccumulated,
       rating,
@@ -306,9 +315,43 @@
     return mapPlayerSessionRow(data);
   }
 
+  // Light variant of fetchAppConfig: every column except layout_state, so polling
+  // paths do not pull the (potentially large) layout/history blob on every tick.
+  async function fetchAppConfigMetadata(sessionId) {
+    const supabaseClient = getClient();
+    if (!supabaseClient) return mapConfigRow(null);
+    if (sessionId) {
+      const { data, error } = await supabaseClient
+        .from(PLAYER_SESSIONS_TABLE)
+        .select(PLAYER_SESSION_LIGHT_COLUMNS)
+        .eq('id', sessionId)
+        .maybeSingle();
+        if (error) throw error;
+      return mapConfigRow(data ? {
+        ...data,
+        id: 'global',
+        session_id: data.id || data.session_id || sessionId,
+        active_session_id: data.id || data.active_session_id || sessionId
+      } : null);
+    }
+    const { data, error } = await supabaseClient
+      .from(PUBLIC_APP_CONFIG_VIEW)
+      .select('id, session_id, active_session_id, location, checkin_enabled, checkin_open_at, checkin_close_at, play_at, court_enabled_states, created_at, updated_at')
+      .eq('id', 'global')
+      .maybeSingle();
+    if (error) throw error;
+    return mapConfigRow(data);
+  }
+
   // Dropdown/list needs metadata only. Never pull layout_state or history here so
   // the payload does not scale with the total layout size of every session.
   const PLAYER_SESSION_METADATA_COLUMNS = 'id,location,checkin_enabled,checkin_open_at,checkin_close_at,play_at,created_at';
+  // Everything except layout_state: safe for polling paths that must not pull the
+  // (potentially large) layout/history blob on every tick.
+  const PLAYER_SESSION_LIGHT_COLUMNS = PLAYER_SESSION_METADATA_COLUMNS + ',court_enabled_states,ownership_version,host_user_id,version,updated_by,updated_at';
+  // public_player_sessions aliases id -> session_id and exposes no version/host
+  // columns, so the view needs its own projection (still excludes layout_state).
+  const PUBLIC_PLAYER_SESSION_LIGHT_COLUMNS = 'session_id,location,checkin_enabled,checkin_open_at,checkin_close_at,play_at,court_enabled_states,created_at,updated_at';
 
   async function fetchPlayerSessions() {
     const supabaseClient = getClient();
@@ -328,7 +371,7 @@
     const source = PUBLIC_PLAYER_SESSIONS_VIEW;
     const { data, error } = await supabaseClient
       .from(source)
-      .select('*')
+      .select(PUBLIC_PLAYER_SESSION_LIGHT_COLUMNS)
       .order('checkin_open_at', { ascending: true, nullsFirst: false })
       .order('created_at', { ascending: false });
     if (error) throw error;
@@ -407,6 +450,7 @@
       phone: profilePlayer?.phone || sessionPlayer?.phone || '',
       gender: profilePlayer?.gender || sessionPlayer?.gender || 'male',
       prefer: profilePlayer?.prefer || sessionPlayer?.prefer || 'normal',
+      extraLevel: normalizeExtraLevel(sessionPlayer?.extraLevel ?? profilePlayer?.extraLevel),
       ready: profilePlayer?.ready !== false,
       level: profileLevel,
       ratingAccumulated: nextRatingAccumulated,
@@ -997,9 +1041,12 @@
     return subscribeToTable(SESSION_PLAYERS_TABLE, callback, { filter: `session_id=eq.${sessionId}` });
   }
 
-  function subscribeToAppConfig(callback) {
+  function subscribeToAppConfig(callback, sessionId) {
     const unsubscribeAppConfig = subscribeToTable(APP_CONFIG_TABLE, callback);
-    const unsubscribeSessions = subscribeToTable(PLAYER_SESSIONS_TABLE, callback);
+    // Filter to the active session when known: unfiltered player_sessions events
+    // ship every session's layout_state blob to every connected client.
+    const sessionFilter = sessionId ? `id=eq.${sessionId}` : null;
+    const unsubscribeSessions = subscribeToTable(PLAYER_SESSIONS_TABLE, callback, sessionFilter ? { filter: sessionFilter } : {});
     return function () {
       unsubscribeAppConfig();
       unsubscribeSessions();
@@ -1063,6 +1110,7 @@
     getMissingConfigMessage: getMissingConfigMessage,
     fetchPlayerSession: fetchPlayerSession,
     fetchPlayerSessions: fetchPlayerSessions,
+    fetchAppConfigMetadata: fetchAppConfigMetadata,
     fetchSelectablePlayerSessions: fetchSelectablePlayerSessions,
     createPlayerSession: createPlayerSession,
     updatePlayerSession: updatePlayerSession,

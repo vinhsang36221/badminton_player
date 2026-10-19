@@ -328,6 +328,10 @@ body.bg-light #courtsRow .court-card .team-player-stack .player-drop-slot {
 .prefer-chill { background-color: #c8facc !important; color: #064e14 !important; }
 .prefer-normal { background-color: #fff3bf !important; color: #614700 !important; }
 .prefer-challenge { background-color: #ffb3b3 !important; color: #600000 !important; }
+/* Extra level states: + light green, = light yellow, - light red */
+.extralevel-plus { background-color: #c8facc !important; color: #064e14 !important; }
+.extralevel-equal { background-color: #fff3bf !important; color: #614700 !important; }
+.extralevel-minus { background-color: #ffb3b3 !important; color: #600000 !important; }
 
 /* Admin player list alignment */
 .admin-row{ display:grid; grid-template-columns: minmax(120px, 150px) auto; align-items:center; gap:6px; padding:4px 6px; width:100%; }
@@ -349,6 +353,7 @@ body.bg-light #courtsRow .court-card .team-player-stack .player-drop-slot {
 .admin-right .btn-level{ width:48px !important; }
 .admin-right .admin-level-input{ width:56px !important; min-width:56px !important; }
 .admin-right .btn-ready, .admin-right .btn-notready{ width:48px !important; }
+.admin-right .extralevel-btn{ width:40px !important; min-width:40px !important; }
 .admin-right .prefer-btn{ width:96px !important; }
 .admin-right .admin-partner-select{ width:100px !important; min-width:100px !important; }
 .admin-right .admin-couple-select{ width:72px !important; min-width:72px !important; }
@@ -650,6 +655,8 @@ body.bg-light #courtsRow .court-card .team-player-stack .player-drop-slot {
 
 /* Prefer toggle in admin list: keep fixed width to avoid shifting */
 .prefer-btn{ display:inline-flex; justify-content:center; align-items:center; width:96px !important; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+/* Extra level toggle: compact fixed width to avoid layout shift */
+.extralevel-btn{ display:inline-flex; justify-content:center; align-items:center; white-space:nowrap; }
 
 /* Gender button fixed width to avoid layout shift when toggling */
 .gender-btn{ display:inline-flex; justify-content:center; align-items:center; width:96px !important; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
@@ -685,6 +692,7 @@ body.bg-light #courtsRow .court-card .team-player-stack .player-drop-slot {
 	/* prefer button should still visually align but allow wrapping */
 	.prefer-btn{ width:auto !important; min-width:72px; }
 	.gender-btn{ width:auto !important; min-width:72px; }
+	.extralevel-btn{ width:auto !important; min-width:40px !important; }
 	/* ensure admin panels stack and scroll nicely */
 	#adminPlayerList{ max-height:min(100vh, 900px); overflow:auto; }
 	#adminHistoryBox, #logPreview{ max-height:200px; overflow:auto; }
@@ -732,7 +740,7 @@ body.bg-light #courtsRow .court-card .team-player-stack .player-drop-slot {
 .gender-btn { font-weight: 400 !important; color: #000 !important; }
 
 /* Exception: Prefer button should show full semantic color like Wishes */
-#adminPlayerList .admin-right .prefer-btn { filter: none !important; }
+#adminPlayerList .admin-right .extralevel-btn { filter: none !important; }
 
 /* Court label and player name emphasis */
 .court-card .card-header { font-weight: 700 !important; }
