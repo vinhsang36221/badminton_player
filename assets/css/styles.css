@@ -608,6 +608,18 @@ body.bg-light #courtsRow .court-card .team-player-stack .player-drop-slot {
 	align-self:end;
 }
 
+.session-window-action--button-group{
+	display:flex;
+	gap:8px;
+	grid-column: span 2;
+}
+
+.session-window-action--button-group .btn{
+	width:auto;
+	flex:1 1 0;
+	white-space:nowrap;
+}
+
 @media (max-width: 1199.98px){
 	.session-window-switch{
 		grid-column: span 1;
@@ -680,6 +692,7 @@ body.bg-light #courtsRow .court-card .team-player-stack .player-drop-slot {
 	.session-window-switch{ padding-bottom:0; }
 	.session-window-action{ justify-content:stretch; }
 	.session-window-action .btn{ width:100%; }
+	.session-window-action--button-group{ flex-direction:column; }
 	.admin-row{ grid-template-columns: 1fr; align-items:flex-start; padding:4px 4px; }
 	.admin-left{ min-width:0; padding-right:0; margin-bottom:6px; }
 	.admin-actions{ width:100%; display:flex; flex-direction:column; align-items:stretch; gap:6px; }
