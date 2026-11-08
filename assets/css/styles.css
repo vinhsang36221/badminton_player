@@ -270,6 +270,7 @@ body.bg-light #courtsRow .court-card .team-player-stack .player-drop-slot {
 /* Semantic button colors */
 .btn-male { background-color: #cfe3ff !important; color: #000 !important; }
 .btn-female { background-color: #ffd6ec !important; color: #000 !important; }
+.btn-npc { background-color: #e0e0e0 !important; color: #000 !important; }
 .btn-level { background-color: #fdcc3a !important; color: #000 !important; }
 .admin-level-input {
 	background-color: #fdcc3a !important;
@@ -762,6 +763,7 @@ body.bg-light #courtsRow .court-card .team-player-stack .player-drop-slot {
 /* player name color by gender (use same background colors as button variants) */
 .player-name.male { color: #0f57b7 !important; }
 .player-name.female { color: #b23a7a !important; }
+.player-name.npc { color: #6c757d !important; }
 .player-name.player-name-forced-idle { color: #dc3545 !important; }
 
 .forced-idle-unlock-btn {

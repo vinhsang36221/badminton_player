@@ -137,7 +137,10 @@ function displayPlayerName(player) {
 }
 
 function displayPlayerClass(player) {
-  return player && player.gender === 'female' ? 'female' : 'male';
+  if (!player) return 'male';
+  if (player.gender === 'female') return 'female';
+  if (player.gender === 'npc') return 'npc';
+  return 'male';
 }
 
 function displayResolvePlayer(ref, playerMap) {
